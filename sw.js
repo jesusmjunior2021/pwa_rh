@@ -30,7 +30,7 @@
  */
 'use strict';
 
-const VERSAO = 'v1.0.0';
+const VERSAO = 'v1.0.1';
 const CACHE_CASCA = 'bolsa-casca-' + VERSAO;
 const CACHE_DADOS = 'bolsa-dados-' + VERSAO;
 
