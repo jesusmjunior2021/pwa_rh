@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Auxílio-Bolsa TJMA — minha jornada</title>
+<meta name="description" content="Acompanhe seu auxílio-bolsa de estudos: o que já foi cumprido, o que falta entregar e quando vence cada prazo.">
+<meta name="theme-color" content="#1B4F8A">
+<meta name="color-scheme" content="light">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icones/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="icones/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+
+<!-- ===================================================================== -->
+<!-- ABERTURA: precisa explicar o app sem ninguém explicar o app.          -->
+<!-- ===================================================================== -->
+<main id="abertura" class="tela ativa">
+  <header class="capa">
+    <p class="orgao">Tribunal de Justiça do Maranhão<br>
+      <span>Coordenadoria de Acompanhamento e Desenvolvimento na Carreira</span></p>
+
+    <h1>Sua bolsa tem<br><em>prazos</em>.<br>Aqui eles não passam batido.</h1>
+
+    <p class="chamada">
+      Este é o acompanhamento do seu auxílio-bolsa de estudos. Você vê o que já
+      entregou, o que ainda falta e quanto tempo resta — e o celular te avisa
+      antes de vencer.
+    </p>
+
+    <div class="acoes-capa">
+      <button class="botao primario" data-ir="acesso">Ver minha jornada</button>
+      <button class="botao fantasma" data-papel="instalar" hidden>Instalar no celular</button>
+    </div>
+  </header>
+
+  <section class="explicacao">
+    <h2>Como funciona</h2>
+    <ol class="passos">
+      <li>
+        <h3>Você entra com sua matrícula</h3>
+        <p>Junto com o código de acesso que a Coordenadoria envia. Só você vê
+          seus dados — a matrícula sozinha não abre nada.</p>
+      </li>
+      <li>
+        <h3>Vê a trilha do seu benefício</h3>
+        <p>Cada etapa cumprida vira um carimbo. As que faltam ficam abertas,
+          com o que precisa ser entregue e onde.</p>
+      </li>
+      <li>
+        <h3>É avisado antes do prazo</h3>
+        <p>Com sete dias, três dias, um dia e no dia. Com som e vibração,
+          se você permitir as notificações.</p>
+      </li>
+      <li>
+        <h3>Avisa quando entregar</h3>
+        <p>O aviso cai direto na planilha da Coordenadoria. Não substitui o
+          protocolo no Digidoc — adianta a conferência.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section class="explicacao">
+    <h2>Sobre seus dados</h2>
+    <p class="miudo">
+      Este aplicativo mostra dados funcionais e acadêmicos que já constam dos
+      seus processos administrativos, tratados pela Coordenadoria no exercício
+      de competência legal. Nada é publicado, nada vai para terceiros.
+      O envio de mensagens por WhatsApp é <strong>opcional</strong> e só
+      acontece se você autorizar expressamente — a autorização fica registrada
+      com data e hora, e pode ser revogada a qualquer momento dentro do app.
+    </p>
+  </section>
+
+  <footer class="rodape-capa">
+    <p>Dúvidas: <a href="mailto:cocarreira@tjma.jus.br">cocarreira@tjma.jus.br</a></p>
+  </footer>
+</main>
+
+<!-- ===================================================================== -->
+<!-- ACESSO                                                                -->
+<!-- ===================================================================== -->
+<main id="acesso" class="tela">
+  <header class="topo-tela">
+    <button class="voltar" data-ir="abertura" aria-label="Voltar">&larr;</button>
+    <h2>Entrar</h2>
+  </header>
+
+  <div class="miolo">
+    <p class="conduz">Use a matrícula e o código de acesso que a Coordenadoria
+      enviou. Se você não tem o código, escreva para
+      <a href="mailto:cocarreira@tjma.jus.br">cocarreira@tjma.jus.br</a>.</p>
+
+    <label class="campo">
+      <span>Matrícula</span>
+      <input type="text" inputmode="numeric" autocomplete="username"
+             data-campo="matricula" placeholder="114272" maxlength="12">
+    </label>
+
+    <label class="campo">
+      <span>Código de acesso</span>
+      <input type="text" inputmode="text" autocomplete="one-time-code"
+             data-campo="codigo" placeholder="6 caracteres" maxlength="12">
+    </label>
+
+    <label class="marcar">
+      <input type="checkbox" data-campo="lembrar" checked>
+      <span>Continuar conectado neste aparelho</span>
+    </label>
+
+    <button class="botao primario largo" data-papel="entrar">Entrar</button>
+    <p class="recado" data-papel="msg-acesso" role="status"></p>
+
+    <button class="botao fantasma largo acesso-admin-link" data-ir="admin-entrar">
+      Sou da Coordenadoria — acesso administrativo
+    </button>
+  </div>
+</main>
+
+<!-- ===================================================================== -->
+<!-- ACESSO ADMINISTRATIVO (Coordenadoria)                                 -->
+<!-- ===================================================================== -->
+<main id="admin-entrar" class="tela">
+  <header class="topo-tela">
+    <button class="voltar" data-ir="acesso" aria-label="Voltar">&larr;</button>
+    <h2>Acesso administrativo</h2>
+  </header>
+
+  <div class="miolo">
+    <p class="conduz">Uso restrito à Coordenadoria: consulta a jornada de
+      qualquer servidor cadastrado, em modo só-leitura.</p>
+
+    <label class="campo">
+      <span>Usuário</span>
+      <input type="text" autocomplete="username" data-campo="admin-usuario"
+             placeholder="usuário administrativo" maxlength="40">
+    </label>
+
+    <label class="campo">
+      <span>Senha</span>
+      <input type="password" autocomplete="current-password" data-campo="admin-senha"
+             placeholder="senha administrativa">
+    </label>
+
+    <button class="botao primario largo" data-papel="admin-entrar">Entrar</button>
+    <p class="recado" data-papel="msg-admin-entrar" role="status"></p>
+  </div>
+</main>
+
+<!-- ===================================================================== -->
+<!-- BUSCA ADMINISTRATIVA DE SERVIDOR                                      -->
+<!-- ===================================================================== -->
+<main id="admin-busca" class="tela">
+  <header class="topo-tela">
+    <button class="voltar" data-papel="admin-sair" aria-label="Sair do modo administrativo">&larr;</button>
+    <h2>Buscar servidor</h2>
+  </header>
+
+  <div class="miolo">
+    <p class="conduz">Digite a matrícula ou o nome do servidor para ver a
+      jornada dele.</p>
+
+    <label class="campo">
+      <span>Matrícula ou nome</span>
+      <input type="text" data-campo="admin-busca" placeholder="114272 ou Aldezi">
+    </label>
+
+    <button class="botao primario largo" data-papel="admin-buscar">Buscar</button>
+    <p class="recado" data-papel="msg-admin-busca" role="status"></p>
+
+    <ul class="lista-resultados" data-papel="admin-resultados"></ul>
+  </div>
+</main>
+
+<!-- ===================================================================== -->
+<!-- JORNADA                                                               -->
+<!-- ===================================================================== -->
+<main id="jornada" class="tela">
+  <header class="topo-app">
+    <div>
+      <p class="saudacao" data-papel="saudacao">Olá</p>
+      <p class="sub" data-papel="sub-identificacao"></p>
+    </div>
+    <button class="sair" data-papel="sair" aria-label="Sair">Sair</button>
+  </header>
+
+  <div class="fita-offline" data-papel="fita-offline" hidden>
+    Mostrando a última cópia guardada. Sem conexão agora.
+  </div>
+
+  <div class="fita-admin" data-papel="fita-admin" hidden>
+    <span data-papel="fita-admin-texto"></span>
+    <span class="fita-admin-acoes">
+      <button data-papel="admin-trocar">Trocar servidor</button>
+      <button data-papel="admin-sair-jornada">Sair do admin</button>
+    </span>
+  </div>
+
+  <nav class="abas" role="tablist">
+    <button role="tab" class="aba ativa" data-painel="p-trilha">Trilha</button>
+    <button role="tab" class="aba" data-painel="p-prazos">Prazos</button>
+    <button role="tab" class="aba" data-painel="p-percurso">Processo</button>
+    <button role="tab" class="aba" data-painel="p-enviar">Enviar</button>
+    <button role="tab" class="aba" data-painel="p-ajustes">Ajustes</button>
+  </nav>
+
+  <!-- ---- trilha ---- -->
+  <section class="painel ativo" id="p-trilha">
+    <div class="painel-evo" data-papel="painel-evo">
+      <div data-papel="evo-figura"></div>
+      <div class="evo-conversa">
+        <p class="evo-nome">EVO</p>
+        <p class="evo-fala" data-papel="evo-fala">Vamos ver como está sua jornada.</p>
+        <p class="evo-estagio" data-papel="evo-estagio"></p>
+      </div>
+    </div>
+
+    <div class="cartela">
+      <div class="cartela-topo">
+        <p class="rotulo">Caderneta do benefício</p>
+        <p class="contagem-carimbos" data-papel="contagem-carimbos">—</p>
+      </div>
+      <div class="carimbos" data-papel="carimbos"></div>
+      <p class="nivel-linha">
+        <span class="nivel" data-papel="nivel">—</span>
+        <span class="nivel-nota" data-papel="nivel-nota"></span>
+      </p>
+    </div>
+
+    <p class="narrativa" data-papel="narrativa"></p>
+
+    <ol class="trilha" data-papel="trilha"></ol>
+  </section>
+
+  <!-- ---- prazos ---- -->
+  <section class="painel" id="p-prazos">
+    <p class="conduz">O que vence primeiro vem primeiro. Toque para ver o que
+      precisa ser entregue.</p>
+    <div class="prazos" data-papel="prazos"></div>
+
+    <div class="cartao-alerta" data-papel="cartao-notificacao" hidden>
+      <h3>Quer ser avisado antes?</h3>
+      <p>Com a permissão de notificação, o app avisa com sete, três e um dia de
+        antecedência — e no dia do vencimento, com som e vibração.</p>
+      <button class="botao primario" data-papel="ligar-notificacao">Ligar avisos</button>
+      <p class="miudo" data-papel="msg-notificacao"></p>
+    </div>
+  </section>
+
+  <!-- ---- percurso / árvore de processos ---- -->
+  <section class="painel" id="p-percurso">
+    <p class="conduz">O caminho do seu auxílio-bolsa dentro do Tribunal: o
+      processo de origem e tudo que saiu dele.</p>
+    <div class="percurso" data-papel="percurso"></div>
+    <p class="miudo" data-papel="percurso-nota"></p>
+  </section>
+
+  <!-- ---- enviar ---- -->
+  <section class="painel" id="p-enviar">
+    <p class="conduz">Entregou um documento? Avise aqui. A Coordenadoria vê na
+      hora e confere contra o processo.</p>
+
+    <label class="campo">
+      <span>O que você entregou</span>
+      <select data-campo="tipo-envio"></select>
+    </label>
+
+    <label class="campo">
+      <span>Como foi entregue</span>
+      <select data-campo="via-envio">
+        <option value="digidoc">Protocolo no Digidoc</option>
+        <option value="email">E-mail à Coordenadoria</option>
+        <option value="presencial">Entrega presencial</option>
+        <option value="outro">Outro</option>
+      </select>
+    </label>
+
+    <label class="campo">
+      <span>Número do protocolo ou processo (se tiver)</span>
+      <input type="text" inputmode="numeric" data-campo="protocolo"
+             placeholder="27588/2023">
+    </label>
+
+    <label class="campo">
+      <span>Observação</span>
+      <textarea data-campo="observacao" rows="3"
+                placeholder="Ex.: enviei o histórico do semestre 2026.1 pelo Digidoc hoje."></textarea>
+    </label>
+
+    <button class="botao primario largo" data-papel="enviar-aviso">Avisar a Coordenadoria</button>
+    <p class="recado" data-papel="msg-envio" role="status"></p>
+
+    <p class="miudo">Este aviso <strong>não substitui</strong> o protocolo
+      oficial. Ele adianta a conferência e registra sua data de entrega.</p>
+
+    <div class="fila-pendente" data-papel="fila-pendente" hidden>
+      <h3>Aguardando conexão</h3>
+      <p class="miudo">Estes avisos foram guardados no aparelho e serão enviados
+        assim que houver internet.</p>
+      <ul data-papel="lista-fila"></ul>
+    </div>
+  </section>
+
+  <!-- ---- ajustes ---- -->
+  <section class="painel" id="p-ajustes">
+    <div class="grupo-ajuste">
+      <h3>Avisos no celular</h3>
+      <label class="marcar">
+        <input type="checkbox" data-campo="som">
+        <span>Tocar som ao avisar</span>
+      </label>
+      <label class="marcar">
+        <input type="checkbox" data-campo="vibrar">
+        <span>Vibrar</span>
+      </label>
+      <button class="botao fantasma" data-papel="testar-aviso">Testar um aviso agora</button>
+      <p class="miudo" data-papel="estado-notificacao"></p>
+    </div>
+
+    <div class="grupo-ajuste">
+      <h3>WhatsApp da Coordenadoria</h3>
+      <p class="miudo">Autorização opcional para receber avisos de prazo por
+        WhatsApp no número cadastrado. Você pode revogar quando quiser.</p>
+      <label class="campo">
+        <span>Seu número com DDD</span>
+        <input type="tel" inputmode="tel" data-campo="whatsapp"
+               placeholder="(98) 90000-0000" autocomplete="tel">
+      </label>
+      <label class="marcar">
+        <input type="checkbox" data-campo="consente-whatsapp">
+        <span>Autorizo a COCARREIRA a me enviar avisos sobre o auxílio-bolsa
+          por WhatsApp. Sei que posso revogar a qualquer momento.</span>
+      </label>
+      <button class="botao fantasma" data-papel="salvar-whatsapp">Salvar autorização</button>
+      <p class="recado" data-papel="msg-whatsapp" role="status"></p>
+      <p class="miudo" data-papel="registro-consentimento"></p>
+    </div>
+
+    <div class="grupo-ajuste">
+      <h3>Este aparelho</h3>
+      <button class="botao fantasma" data-papel="atualizar-dados">Atualizar meus dados</button>
+      <button class="botao fantasma" data-papel="instalar-ajustes" hidden>Instalar no celular</button>
+      <button class="botao fantasma perigo" data-papel="apagar-local">Apagar meus dados deste aparelho</button>
+      <p class="miudo" data-papel="info-versao"></p>
+    </div>
+  </section>
+</main>
+
+<!-- Aviso flutuante. `aria-live` faz o leitor de tela anunciar sem roubar o
+     foco de quem está no meio de um formulário. -->
+<div class="torradeira" data-papel="torradeira" role="status" aria-live="polite"></div>
+
+<script src="config.js"></script>
+<script src="acessos.js"></script>
+<script src="evo.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
