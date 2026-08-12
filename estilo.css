@@ -897,3 +897,57 @@ textarea:focus-visible {
 }
 
 .fita-admin-acoes button:active { transform: scale(.97); }
+
+/* ---------------------------------------------------------------------------
+   PERCURSO — árvore do processo
+   O processo de origem fica com barra azul e recuo zero; o que saiu dele entra
+   recuado, com um traço ligando. A hierarquia se lê sem legenda.
+   ------------------------------------------------------------------------ */
+.percurso { display: flex; flex-direction: column; gap: var(--e3); }
+
+.percurso-no {
+  background: var(--superficie);
+  border: 1px solid var(--traco);
+  border-left: 4px solid var(--cinza);
+  border-radius: var(--raio);
+  padding: var(--e4);
+  box-shadow: var(--sombra);
+  margin-left: var(--e5);
+  position: relative;
+}
+
+.percurso-no::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--e5) * -1);
+  top: 22px;
+  width: var(--e5);
+  height: 1px;
+  background: var(--traco);
+}
+
+.percurso-no.principal {
+  margin-left: 0;
+  border-left-color: var(--azul);
+  background: var(--azul-claro);
+}
+.percurso-no.principal::before { display: none; }
+
+.percurso-topo {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--e2); flex-wrap: wrap; margin-bottom: var(--e2);
+}
+.percurso-topo h3 { margin: 0; font-family: var(--mono); font-size: 1rem; }
+
+.percurso-etiqueta {
+  font-size: .75rem; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--tinta-fraca); background: var(--cinza-claro);
+  padding: 2px var(--e2); border-radius: 999px; white-space: nowrap;
+}
+.percurso-no.principal .percurso-etiqueta { background: var(--papel); color: var(--azul); }
+
+.percurso-linha { margin: var(--e1) 0; font-size: .92rem; }
+
+.percurso-parado {
+  color: var(--terracota); font-size: .82rem; margin-left: var(--e2);
+}

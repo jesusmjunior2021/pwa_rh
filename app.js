@@ -44,7 +44,8 @@ const CHAVES = {
   jornada: 'bolsa.jornada',
   ajustes: 'bolsa.ajustes',
   fila: 'bolsa.fila',
-  adiados: 'bolsa.adiados'
+  adiados: 'bolsa.adiados',
+  admin: 'bolsa.admin'
 };
 
 const AJUSTES_PADRAO = { som: true, vibrar: true, whatsapp: '', consente: false,
@@ -337,6 +338,53 @@ function msgAdmin(papelAlvo, texto, tom) {
   alvo.dataset.tom = tom || '';
 }
 
+/* ---------------------------------------------------------------------------
+ * ENTRADA DA COORDENADORIA — comodidade sem publicar a senha
+ *
+ * O usuário vem do config.js e já aparece preenchido. A senha, depois de ser
+ * aceita UMA vez, fica guardada naquele aparelho e o app entra sozinho nas
+ * próximas aberturas. Você digita uma vez por computador e nunca mais.
+ *
+ * A senha não vai no config.js por um motivo concreto: esse arquivo é servido
+ * aberto pelo Netlify, e o acesso administrativo lê a jornada de QUALQUER
+ * servidor. Publicá-la ali equivaleria a deixar a base dos bolsistas legível
+ * sem credencial nenhuma. Se ainda assim você quiser, preencha `admin.senha`
+ * no config.js — o código abaixo já usa o valor de lá quando existe.
+ * ------------------------------------------------------------------------- */
+const CONF_ADMIN = (window.CONFIG_PORTAL && window.CONFIG_PORTAL.admin) || {};
+
+function senhaAdminGuardada() {
+  if (CONF_ADMIN.senha) return CONF_ADMIN.senha;
+  if (CONF_ADMIN.lembrar_no_aparelho === false) return '';
+  return recuperar(CHAVES.admin, '') || '';
+}
+
+function prepararTelaAdmin() {
+  if (CONF_ADMIN.usuario && !campo('admin-usuario').value) {
+    campo('admin-usuario').value = CONF_ADMIN.usuario;
+  }
+  const guardada = senhaAdminGuardada();
+  if (guardada && !campo('admin-senha').value) {
+    campo('admin-senha').value = guardada;
+  }
+}
+
+/* Entra sozinho quando já há senha conhecida. Falha em silêncio: senha trocada
+ * na Coordenadoria não pode virar uma mensagem de erro na cara de quem só
+ * abriu o app. */
+async function tentarEntrarAdminAutomatico() {
+  const senha = senhaAdminGuardada();
+  if (!senha || adminSessao) return false;
+  const saida = await chamarApi('entrar_admin',
+    { usuario: CONF_ADMIN.usuario || 'BOLSAS', senha });
+  if (!saida.ok) {
+    if (!CONF_ADMIN.senha) localStorage.removeItem(CHAVES.admin);
+    return false;
+  }
+  adminSessao = { token: saida.token_admin };
+  return true;
+}
+
 papel('admin-entrar').addEventListener('click', async () => {
   const usuario = campo('admin-usuario').value.trim();
   const senha = campo('admin-senha').value;
@@ -356,11 +404,27 @@ papel('admin-entrar').addEventListener('click', async () => {
   }
 
   adminSessao = { token: saida.token_admin };
+  if (CONF_ADMIN.lembrar_no_aparelho !== false && !CONF_ADMIN.senha) {
+    guardar(CHAVES.admin, senha);
+  }
   campo('admin-senha').value = '';
   msgAdmin('msg-admin-entrar', '', '');
   papel('admin-resultados').innerHTML = '';
   campo('admin-busca').value = '';
   irPara('admin-busca');
+});
+
+/* Ao abrir a tela administrativa: preenche o que já se sabe e, se a senha já
+ * está conhecida neste aparelho, pula direto para a busca. */
+document.querySelectorAll('[data-ir="admin-entrar"]').forEach(botao => {
+  botao.addEventListener('click', async () => {
+    prepararTelaAdmin();
+    if (await tentarEntrarAdminAutomatico()) {
+      papel('admin-resultados').innerHTML = '';
+      campo('admin-busca').value = '';
+      irPara('admin-busca');
+    }
+  });
 });
 
 campo('admin-senha').addEventListener('keydown', evento => {
@@ -512,6 +576,7 @@ function desenharTudo() {
   desenharCartela();
   desenharTrilha();
   desenharPrazos();
+  desenharPercurso();
   preencherTiposDeEnvio();
   desenharFila();
 }
@@ -630,6 +695,62 @@ function desenharTrilha() {
             ? `<p class="registro" style="color:var(--ambar)">${escapar(m.como_cumprir)}</p>`
             : '')}
     </li>`).join('');
+}
+
+// ---------------------------------------------------------------------------
+// PERCURSO — a árvore do processo
+// ---------------------------------------------------------------------------
+/* Mostra o que a Coordenadoria registrou sobre o andamento, e SÓ isso. Quando
+ * a árvore ainda não foi ingerida, a tela diz que não há registro — em vez de
+ * ficar vazia, que a pessoa leria como "não existe processo meu". */
+function cartaoDeNo(no, principal) {
+  const parado = no.dias_parado > 0
+    ? `<span class="percurso-parado">${no.dias_parado} dia(s) sem movimentação</span>`
+    : '';
+  return `<article class="percurso-no ${principal ? 'principal' : ''} entra">
+      <div class="percurso-topo">
+        <h3>${escapar(no.numero_legivel || no.numero || '—')}</h3>
+        <span class="percurso-etiqueta">${escapar(principal ? 'Processo de origem'
+          : (no.tipo || 'Requisição'))}</span>
+      </div>
+      ${no.assunto ? `<p>${escapar(no.assunto)}</p>` : ''}
+      ${no.unidade ? `<p class="percurso-linha">Onde está:
+        <strong>${escapar(no.unidade)}</strong></p>` : ''}
+      ${no.situacao ? `<p class="percurso-linha">Situação:
+        <strong>${escapar(no.situacao)}</strong></p>` : ''}
+      ${no.ultima_mov ? `<p class="percurso-linha">Última movimentação:
+        <strong>${escapar(no.ultima_mov)}</strong> ${parado}</p>` : ''}
+      ${no.movimentacoes ? `<p class="base-legal">${no.movimentacoes} movimentação(ões)
+        registrada(s)</p>` : ''}
+    </article>`;
+}
+
+function desenharPercurso() {
+  const alvo = papel('percurso');
+  const nota = papel('percurso-nota');
+  if (!alvo) return;
+
+  const p = (jornada && jornada.percurso) || null;
+  if (!p || !p.disponivel) {
+    alvo.innerHTML = `
+      <div class="vazio-bom" style="border-color:var(--cinza)">
+        Ainda não há andamento registrado para a sua matrícula.<br>
+        ${jornada && jornada.processo_legivel
+          ? 'Seu processo de origem é o ' + escapar(jornada.processo_legivel) + '.'
+          : ''}
+      </div>`;
+    nota.textContent = 'O andamento é alimentado pela leitura do Digidoc feita ' +
+      'pela Coordenadoria. Se você protocolou algo há pouco tempo, pode ainda ' +
+      'não aparecer aqui.';
+    return;
+  }
+
+  const partes = [];
+  if (p.principal) partes.push(cartaoDeNo(p.principal, true));
+  (p.ramos || []).forEach(no => partes.push(cartaoDeNo(no, false)));
+  alvo.innerHTML = partes.join('');
+  nota.textContent = 'Fonte: registro do Digidoc consolidado pela Coordenadoria' +
+    (p.atualizado_em ? ' — leitura de ' + p.atualizado_em : '') + '.';
 }
 
 // ---------------------------------------------------------------------------

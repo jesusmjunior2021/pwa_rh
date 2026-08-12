@@ -59,6 +59,25 @@ var ADMIN_SENHA_HASH = _hash('BOLSAS@RH');
 
 var FUSO = 'America/Fortaleza';
 var ABA_BOLSISTAS = 'SERVIDORES CAEDNC';
+
+/* Nomes já usados para a mesma aba em versões diferentes da planilha. O nome
+ * da aba principal é escolhido na tela do BOLSASRH, então ele varia — e uma
+ * constante errada aqui produz o pior sintoma possível: login funciona, e a
+ * jornada volta "Não achei seu cadastro na base". Se nenhum destes existir, o
+ * _abaBolsistas() procura pelo CABEÇALHO, que é estável. */
+var ABA_BOLSISTAS_ALTERNATIVAS = [
+  'BOLSISTAS', 'AUXILIO BOLSA', 'AUXÍLIO BOLSA', 'PLANILHA GERAL AUXÍLIO BOLSA',
+  'GERAL', 'Página1', 'Sheet1'
+];
+
+/* Aba com os códigos em TEXTO (Matrícula | Nome completo | Código SAL). É a
+ * que a Coordenadoria mantém à mão e a que foi efetivamente populada. O
+ * PORTAL_ACESSO, com hash, continua valendo — o login aceita os dois. */
+var ABA_SAL = 'SAL_CODIGOS';
+
+/* Espelho calculado da árvore de processos, gravado pela ingestão do Digidoc. */
+var ABA_ARVORE = 'ARVORE_PROCESSOS';
+
 var ABA_ACESSO = 'PORTAL_ACESSO';
 var ABA_AVISOS = 'PORTAL_AVISOS';
 var ABA_CONSENTIMENTO = 'PORTAL_CONSENTIMENTO';
@@ -160,6 +179,53 @@ function _planilha() {
   return SpreadsheetApp.getActiveSpreadsheet();
 }
 
+/* ---------------------------------------------------------------------------
+ * A ABA DE BOLSISTAS, ENCONTRADA PELO CABEÇALHO
+ *
+ * Procura, nesta ordem: o nome configurado, os nomes já usados antes, e por
+ * fim qualquer aba cujo cabeçalho tenha MATRÍCULA junto de uma coluna que só
+ * existe na ficha do bolsista. O SAL_CODIGOS não passa nesse teste (tem
+ * matrícula e nome, mas não tem curso nem seletivo), então não há risco de
+ * confundir as duas.
+ * ------------------------------------------------------------------------- */
+var _cacheBolsistas = null;
+
+function _cabecalhoNormalizado(aba) {
+  var largura = Math.max(aba.getLastColumn(), 1);
+  return aba.getRange(1, 1, 1, largura).getValues()[0].map(_normalizar);
+}
+
+function _pareceFichaDeBolsista(aba) {
+  try {
+    if (!aba || aba.getLastRow() < 2) return false;
+    var cab = _cabecalhoNormalizado(aba);
+    if (cab.indexOf('MATRICULA') < 0) return false;
+    return cab.indexOf('CURSO') >= 0 ||
+           cab.indexOf('SELETIVODECONVOCACAO') >= 0 ||
+           cab.indexOf('TIPODEBOLSA') >= 0;
+  } catch (erro) {
+    return false;
+  }
+}
+
+function _abaBolsistas() {
+  if (_cacheBolsistas) return _cacheBolsistas;
+  var planilha = _planilha();
+  var candidatos = [ABA_BOLSISTAS].concat(ABA_BOLSISTAS_ALTERNATIVAS);
+  for (var i = 0; i < candidatos.length; i++) {
+    var aba = planilha.getSheetByName(candidatos[i]);
+    if (_pareceFichaDeBolsista(aba)) { _cacheBolsistas = aba; return aba; }
+  }
+  var todas = planilha.getSheets();
+  for (var j = 0; j < todas.length; j++) {
+    if (_pareceFichaDeBolsista(todas[j])) {
+      _cacheBolsistas = todas[j];
+      return todas[j];
+    }
+  }
+  return null;
+}
+
 function _aba(nome, colunas) {
   var planilha = _planilha();
   var aba = planilha.getSheetByName(nome);
@@ -235,7 +301,7 @@ function _novoCodigo() {
  * fica o hash.
  */
 function gerarCodigosParaTodos() {
-  var abaBase = _planilha().getSheetByName(ABA_BOLSISTAS);
+  var abaBase = _abaBolsistas();
   if (!abaBase) throw new Error('Não achei a aba ' + ABA_BOLSISTAS + '.');
 
   var base = abaBase.getDataRange().getValues();
@@ -342,25 +408,82 @@ function _buscarAcesso(matricula) {
   return null;
 }
 
+/* ---------------------------------------------------------------------------
+ * SAL_CODIGOS — a aba com o código em texto
+ *
+ * É a lista que a Coordenadoria mantém e distribui. O código fica legível para
+ * quem abre a planilha, e isso é uma decisão consciente: a planilha está
+ * restrita no Drive, o dado do programa não é sensível a ponto de exigir mais,
+ * e o ganho é que regerar ou conferir um código de um servidor no telefone é
+ * imediato, sem rodar script.
+ *
+ * O que NÃO muda: o código nunca sai daqui para o navegador. O PWA manda o que
+ * a pessoa digitou, o Apps Script compara, e devolve só sim ou não.
+ * ------------------------------------------------------------------------- */
+function _buscarSal(matricula) {
+  var alvo = _digitos(matricula);
+  if (!alvo) return null;
+  var aba = _planilha().getSheetByName(ABA_SAL);
+  if (!aba || aba.getLastRow() < 2) return null;
+
+  var largura = Math.max(aba.getLastColumn(), 3);
+  var valores = aba.getRange(1, 1, aba.getLastRow(), largura).getValues();
+  var cab = valores[0].map(_normalizar);
+
+  /* Descobre as colunas pelo cabeçalho e cai para A/B/C se ele não bater —
+   * a aba é mantida à mão e uma coluna pode ser inserida no meio sem aviso. */
+  var cMat = cab.indexOf('MATRICULA'); if (cMat < 0) cMat = 0;
+  var cNome = -1, cCod = -1;
+  for (var c = 0; c < cab.length; c++) {
+    if (cNome < 0 && cab[c].indexOf('NOME') === 0) cNome = c;
+    if (cCod < 0 && (cab[c].indexOf('CODIGO') === 0 || cab[c] === 'SAL')) cCod = c;
+  }
+  if (cNome < 0) cNome = 1;
+  if (cCod < 0) cCod = 2;
+
+  for (var i = 1; i < valores.length; i++) {
+    if (_digitos(valores[i][cMat]) !== alvo) continue;
+    var codigo = _texto(valores[i][cCod]).toUpperCase();
+    if (!codigo) continue;
+    return { linha: i + 1, nome: _texto(valores[i][cNome]), codigo: codigo };
+  }
+  return null;
+}
+
+/* Aceita o código do PORTAL_ACESSO (hash) OU o do SAL_CODIGOS (texto). Ter as
+ * duas fontes é o que evita a situação em que a Coordenadoria regera o código
+ * numa aba e o servidor continua sendo recusado pela outra. */
 function _autenticar(dados) {
+  var mat = _digitos(dados.matricula);
   var acesso = _buscarAcesso(dados.matricula);
-  if (!acesso) return { ok: false, erro: 'Matrícula não encontrada no cadastro do portal.' };
-  if (_valor(acesso.valores, acesso.indices, 'ATIVO') === 'NAO') {
+  var sal = _buscarSal(dados.matricula);
+
+  if (!acesso && !sal) {
+    return { ok: false, erro: 'Matrícula não encontrada no cadastro do portal.' };
+  }
+  if (acesso && _valor(acesso.valores, acesso.indices, 'ATIVO') === 'NAO') {
     return { ok: false, erro: 'Este acesso está desativado. Procure a Coordenadoria.' };
   }
-  var guardado = _valor(acesso.valores, acesso.indices, 'CODIGO_HASH');
+
+  var guardado = acesso ? _valor(acesso.valores, acesso.indices, 'CODIGO_HASH') : '';
+  var doSal = sal ? _hash(sal.codigo) : '';
+  var referencia = guardado || doSal;
 
   if (dados.token) {
-    if (!_iguais(dados.token, _token(_digitos(dados.matricula), guardado))) {
+    var vale = (guardado && _iguais(dados.token, _token(mat, guardado))) ||
+               (doSal && _iguais(dados.token, _token(mat, doSal)));
+    if (!vale) {
       return { ok: false, erro: 'Sua sessão expirou. Entre novamente com o código.' };
     }
-    return { ok: true, acesso: acesso };
+    return { ok: true, acesso: acesso, sal: sal, referencia: referencia };
   }
 
-  if (!_iguais(_hash(_texto(dados.codigo).toUpperCase()), guardado)) {
-    return { ok: false, erro: 'Código de acesso incorreto.' };
-  }
-  return { ok: true, acesso: acesso, novo: true };
+  var digitado = _hash(_texto(dados.codigo).toUpperCase());
+  var confere = (guardado && _iguais(digitado, guardado)) ||
+                (doSal && _iguais(digitado, doSal));
+  if (!confere) return { ok: false, erro: 'Código de acesso incorreto.' };
+
+  return { ok: true, acesso: acesso, sal: sal, referencia: referencia, novo: true };
 }
 
 /* Token administrativo: renova sozinho a cada 12h, sem precisar de tabela de
@@ -389,7 +512,7 @@ function _autenticarAdmin(dados) {
 // JORNADA
 // ===========================================================================
 function _fichaDoServidor(matricula) {
-  var aba = _planilha().getSheetByName(ABA_BOLSISTAS);
+  var aba = _abaBolsistas();
   if (!aba) return null;
   var valores = aba.getDataRange().getValues();
   var indices = { mapa: {} };
@@ -509,6 +632,83 @@ function _narrativa(nome, conformidade, prazos) {
          'em aberto.';
 }
 
+/* ---------------------------------------------------------------------------
+ * PERCURSO — a árvore de processos do servidor
+ *
+ * Lê ARVORE_PROCESSOS, o espelho calculado que a ingestão do Digidoc grava.
+ * Nada é recalculado aqui: se a árvore está desatualizada, o problema é de
+ * ingestão, e inventar um percurso plausível a partir de outra fonte só
+ * mascararia isso.
+ *
+ * O QUE O SERVIDOR VÊ: número, assunto, unidade onde está, situação, data da
+ * última movimentação. O QUE FICA DE FORA: o nome de quem está com o processo
+ * na mão. É servidor de outro setor, não é dado do bolsista, e mostrar isso
+ * transforma consulta de andamento em cobrança pessoal a um colega.
+ * ------------------------------------------------------------------------- */
+function _percurso(matricula, processoPrincipal) {
+  var vazio = { disponivel: false, principal: null, ramos: [], total: 0 };
+  var aba = _planilha().getSheetByName(ABA_ARVORE);
+  if (!aba || aba.getLastRow() < 2) return vazio;
+
+  var valores = aba.getDataRange().getValues();
+  var mapa = {};
+  valores[0].forEach(function (nome, i) {
+    var limpo = _normalizar(nome);
+    if (limpo) mapa[limpo] = i;
+  });
+  function ler(linha, coluna) {
+    var i = mapa[coluna];
+    return i === undefined ? '' : _texto(linha[i]);
+  }
+
+  var alvo = _digitos(matricula);
+  var raiz = _digitos(processoPrincipal);
+  var nos = [];
+  for (var i = 1; i < valores.length; i++) {
+    var linha = valores[i];
+    var mat = _digitos(ler(linha, 'MATRICULA'));
+    var principal = _digitos(ler(linha, 'PROCESSOPRINCIPAL'));
+    var numero = _digitos(ler(linha, 'NUMERO'));
+    var meu = (alvo && mat === alvo) ||
+              (raiz && (principal === raiz || numero === raiz));
+    if (!meu) continue;
+
+    nos.push({
+      numero: numero,
+      numero_legivel: ler(linha, 'NUMEROLEGIVEL') ||
+        (numero.length >= 5 ? numero.slice(0, -4) + '/' + numero.slice(-4) : numero),
+      nivel: parseInt(ler(linha, 'NIVEL'), 10) || 1,
+      tipo: ler(linha, 'TIPONO'),
+      assunto: ler(linha, 'ASSUNTO'),
+      unidade: ler(linha, 'UNIDADEATUAL'),
+      situacao: ler(linha, 'STATUSATUAL') || ler(linha, 'TIPOULTIMAMOV'),
+      primeira_mov: ler(linha, 'DTPRIMEIRAMOV'),
+      ultima_mov: ler(linha, 'DTULTIMAMOV'),
+      dias_parado: parseInt(ler(linha, 'DIASPARADO'), 10) || 0,
+      movimentacoes: parseInt(ler(linha, 'QTDMOVIMENTACOES'), 10) || 0,
+      principal: principal
+    });
+  }
+  if (!nos.length) return vazio;
+
+  /* Nível 1 é o processo de origem; o resto são as requisições que saíram
+   * dele, mais recentes primeiro — é essa a ordem em que a pessoa procura. */
+  var principais = nos.filter(function (no) { return no.nivel <= 1; });
+  var ramos = nos.filter(function (no) { return no.nivel > 1; });
+  ramos.sort(function (a, b) {
+    return String(b.ultima_mov).split('/').reverse().join('')
+         < String(a.ultima_mov).split('/').reverse().join('') ? -1 : 1;
+  });
+
+  return {
+    disponivel: true,
+    principal: principais[0] || null,
+    ramos: ramos,
+    total: nos.length,
+    atualizado_em: _agora()
+  };
+}
+
 function _jornada(matricula) {
   var campos = _fichaDoServidor(matricula);
   if (!campos) return { ok: false, erro: 'Não achei seu cadastro na base.' };
@@ -551,6 +751,7 @@ function _jornada(matricula) {
     termino_curso: campos['TÉRMINO DO CURSO'] || '',
     marcos: marcos,
     prazos: prazos,
+    percurso: _percurso(matricula, processo),
     conformidade: conformidade,
     narrativa: _narrativa(campos['NOME'], conformidade, prazos),
     atualizado_em: _agora()
@@ -598,6 +799,7 @@ function doPost(e) {
     if (acao === 'entrar_admin') return _resposta(_acaoEntrarAdmin(dados));
     if (acao === 'jornada_admin') return _resposta(_acaoJornadaAdmin(dados));
     if (acao === 'buscar_servidores') return _resposta(_acaoBuscarServidores(dados));
+    if (acao === 'diagnostico') return _resposta(_acaoDiagnostico(dados));
     return _resposta({ ok: false, erro: 'Ação desconhecida: ' + acao });
   } catch (erro) {
     return _resposta({ ok: false, erro: 'Falha no serviço: ' + erro.message });
@@ -611,18 +813,28 @@ function _acaoEntrar(dados) {
   if (!conferencia.ok) return conferencia;
 
   var acesso = conferencia.acesso;
-  var indices = acesso.indices;
-  var hash = _valor(acesso.valores, indices, 'CODIGO_HASH');
+  var nome = '';
 
-  acesso.aba.getRange(acesso.linha, indices.mapa.ULTIMO_ACESSO + 1)
-    .setValue(_agora());
-  acesso.aba.getRange(acesso.linha, indices.mapa.ACESSOS + 1)
-    .setValue((parseInt(_valor(acesso.valores, indices, 'ACESSOS'), 10) || 0) + 1);
+  /* Quem entrou pelo SAL_CODIGOS pode não ter linha no PORTAL_ACESSO. Isso não
+   * pode impedir a entrada: a contagem de acessos é registro de uso, não parte
+   * da autenticação. Falhar aqui derrubaria um login legítimo por causa de uma
+   * estatística. */
+  if (acesso) {
+    var indices = acesso.indices;
+    nome = _valor(acesso.valores, indices, 'NOME');
+    try {
+      acesso.aba.getRange(acesso.linha, indices.mapa.ULTIMO_ACESSO + 1)
+        .setValue(_agora());
+      acesso.aba.getRange(acesso.linha, indices.mapa.ACESSOS + 1)
+        .setValue((parseInt(_valor(acesso.valores, indices, 'ACESSOS'), 10) || 0) + 1);
+    } catch (erro) { /* registro de uso é acessório */ }
+  }
+  if (!nome && conferencia.sal) nome = conferencia.sal.nome;
 
   return {
     ok: true,
-    nome: _valor(acesso.valores, indices, 'NOME'),
-    token: _token(_digitos(dados.matricula), hash)
+    nome: nome,
+    token: _token(_digitos(dados.matricula), conferencia.referencia)
   };
 }
 
@@ -655,11 +867,38 @@ function _acaoJornadaAdmin(dados) {
 /** Busca por matrícula (prefixo) ou nome (substring), só para o modo admin.
  *  Sem termo, devolve os 25 primeiros cadastrados — o suficiente para
  *  conferir que a base está lendo, sem despejar a planilha inteira no app. */
+/* Diz em uma resposta só o que o serviço está enxergando: qual aba virou a
+ * ficha do bolsista, se o SAL_CODIGOS foi achado, se a árvore existe. É o
+ * atalho para não caçar "não achei seu cadastro" no escuro. Exige senha
+ * administrativa porque a lista de abas descreve a planilha inteira. */
+function _acaoDiagnostico(dados) {
+  var conferencia = _autenticarAdmin(dados);
+  if (!conferencia.ok) return conferencia;
+
+  var planilha = _planilha();
+  var ficha = _abaBolsistas();
+  var sal = planilha.getSheetByName(ABA_SAL);
+  var arvore = planilha.getSheetByName(ABA_ARVORE);
+  var acesso = planilha.getSheetByName(ABA_ACESSO);
+
+  return {
+    ok: true,
+    planilha: planilha.getName(),
+    abas: planilha.getSheets().map(function (a) { return a.getName(); }),
+    ficha_bolsistas: ficha ? { aba: ficha.getName(), linhas: ficha.getLastRow() - 1 }
+                           : { aba: null, aviso: 'Nenhuma aba com MATRÍCULA + CURSO/SELETIVO/TIPO DE BOLSA.' },
+    sal_codigos: sal ? { aba: sal.getName(), linhas: sal.getLastRow() - 1 } : null,
+    portal_acesso: acesso ? { aba: acesso.getName(), linhas: acesso.getLastRow() - 1 } : null,
+    arvore: arvore ? { aba: arvore.getName(), linhas: arvore.getLastRow() - 1 } : null,
+    agora: _agora()
+  };
+}
+
 function _acaoBuscarServidores(dados) {
   var conferencia = _autenticarAdmin(dados);
   if (!conferencia.ok) return conferencia;
 
-  var aba = _planilha().getSheetByName(ABA_BOLSISTAS);
+  var aba = _abaBolsistas();
   if (!aba) return { ok: true, resultados: [] };
 
   var valores = aba.getDataRange().getValues();

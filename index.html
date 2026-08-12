@@ -203,6 +203,7 @@
   <nav class="abas" role="tablist">
     <button role="tab" class="aba ativa" data-painel="p-trilha">Trilha</button>
     <button role="tab" class="aba" data-painel="p-prazos">Prazos</button>
+    <button role="tab" class="aba" data-painel="p-percurso">Processo</button>
     <button role="tab" class="aba" data-painel="p-enviar">Enviar</button>
     <button role="tab" class="aba" data-painel="p-ajustes">Ajustes</button>
   </nav>
@@ -248,6 +249,14 @@
       <button class="botao primario" data-papel="ligar-notificacao">Ligar avisos</button>
       <p class="miudo" data-papel="msg-notificacao"></p>
     </div>
+  </section>
+
+  <!-- ---- percurso / árvore de processos ---- -->
+  <section class="painel" id="p-percurso">
+    <p class="conduz">O caminho do seu auxílio-bolsa dentro do Tribunal: o
+      processo de origem e tudo que saiu dele.</p>
+    <div class="percurso" data-papel="percurso"></div>
+    <p class="miudo" data-papel="percurso-nota"></p>
   </section>
 
   <!-- ---- enviar ---- -->

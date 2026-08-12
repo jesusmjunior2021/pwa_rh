@@ -30,7 +30,7 @@
  */
 'use strict';
 
-const VERSAO = 'v1.1.2'; // MAT-PWA-ADMIN-001: config.js fora do cache-first (endereco do servico)
+const VERSAO = 'v1.2.0'; // MAT-PWA-ADMIN-002: URL /exec, login por SAL_CODIGOS, painel de percurso
 const CACHE_CASCA = 'bolsa-casca-' + VERSAO;
 const CACHE_DADOS = 'bolsa-dados-' + VERSAO;
 
