@@ -30,7 +30,7 @@
  */
 'use strict';
 
-const VERSAO = 'v1.2.0'; // MAT-PWA-ADMIN-002: URL /exec, login por SAL_CODIGOS, painel de percurso
+const VERSAO = 'v1.2.1'; // MAT-PWA-ADMIN-003: entrada administrativa em modo local
 const CACHE_CASCA = 'bolsa-casca-' + VERSAO;
 const CACHE_DADOS = 'bolsa-dados-' + VERSAO;
 

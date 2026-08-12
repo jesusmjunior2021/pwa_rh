@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diagnóstico do serviço — Portal Auxílio-Bolsa</title>
+<style>
+  :root { --azul:#1B4F8A; --oliva:#6B7A3F; --terracota:#A8452F; --laranja:#D4762A;
+          --cinza:#8A9098; --traco:#DFE3E8; --tinta:#22272B; }
+  body { font: 16px/1.55 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+         color: var(--tinta); max-width: 860px; margin: 0 auto; padding: 24px 18px 80px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  p.sub { color: #626A72; margin-top: 0; }
+  label { display: block; font-weight: 600; margin: 18px 0 6px; }
+  input, textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--traco);
+                    border-radius: 10px; font: inherit; font-family: ui-monospace, Consolas, monospace;
+                    font-size: .9rem; }
+  button { margin-top: 16px; padding: 12px 20px; border: 0; border-radius: 10px;
+           background: var(--azul); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  .caso { border: 1px solid var(--traco); border-left: 4px solid var(--cinza);
+          border-radius: 10px; padding: 14px 16px; margin-top: 14px; }
+  .caso.ok   { border-left-color: var(--oliva); background: #EFF2E6; }
+  .caso.erro { border-left-color: var(--terracota); background: #FAEDEA; }
+  .caso.aviso{ border-left-color: var(--laranja); background: #FBF0E6; }
+  .caso h3 { margin: 0 0 6px; font-size: 1rem; }
+  pre { background: #F3F5F7; padding: 10px 12px; border-radius: 8px;
+        overflow-x: auto; font-size: .82rem; margin: 8px 0 0; white-space: pre-wrap; }
+  .veredito { margin-top: 24px; padding: 16px 18px; border-radius: 12px;
+              background: #E8EFF7; border: 1px solid var(--azul); }
+  .veredito h2 { margin: 0 0 8px; font-size: 1.1rem; color: var(--azul); }
+  ol { padding-left: 22px; }
+</style>
+
+<h1>Diagnóstico do serviço</h1>
+<p class="sub">Esta página não é o aplicativo. Ela só conversa com o Apps Script e
+mostra, sem filtro, o que ele responde — porque “Sem conexão com o serviço” é a
+mesma mensagem para cinco causas muito diferentes, e sem separá-las a correção
+vira tentativa e erro.</p>
+
+<label for="url">URL /exec da implantação</label>
+<input id="url" value="https://script.google.com/macros/s/AKfycbwDJwNk53JlcZ9PwYMlr6fRNF-RMXQPKFEjjHdMsAjnZpnJjarrBOV-y4fMtHyNhiETdg/exec">
+
+<label for="senha">Senha administrativa (para testar o login de verdade)</label>
+<input id="senha" type="password" value="BOLSAS@RH">
+
+<button id="rodar">Rodar os testes</button>
+
+<div id="saida"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+
+function caso(tom, titulo, corpo, bruto) {
+  const div = document.createElement('div');
+  div.className = 'caso ' + tom;
+  div.innerHTML = '<h3>' + titulo + '</h3><p>' + corpo + '</p>' +
+    (bruto ? '<pre>' + String(bruto).slice(0, 1200).replace(/</g, '&lt;') + '</pre>' : '');
+  $('#saida').appendChild(div);
+}
+
+function veredito(html) {
+  const div = document.createElement('div');
+  div.className = 'veredito';
+  div.innerHTML = html;
+  $('#saida').appendChild(div);
+}
+
+$('#rodar').addEventListener('click', async () => {
+  $('#saida').innerHTML = '';
+  const url = $('#url').value.trim();
+  const senha = $('#senha').value;
+  let diagnostico = null;
+
+  // ---- 0. A forma da URL ------------------------------------------------
+  if (/\/dev(\?|$)/.test(url)) {
+    caso('erro', '0 · A URL termina em /dev',
+      'O endereço /dev só responde à conta dona do script, logada, e não manda ' +
+      'cabeçalho de CORS. Nenhum navegador de terceiro consegue usá-lo. ' +
+      'Troque pela URL /exec antes de qualquer outro teste.');
+    return;
+  }
+  if (!/\/exec(\?|$)/.test(url)) {
+    caso('aviso', '0 · A URL não termina em /exec',
+      'A URL de um App da Web publicado termina em /exec. Confira em ' +
+      'Implantar → Gerenciar implantações.');
+  } else {
+    caso('ok', '0 · Formato da URL', 'Termina em /exec, como deve.');
+  }
+
+  // ---- 1. Existe algo do outro lado? -----------------------------------
+  /* no-cors não deixa LER a resposta, mas distingue "o servidor não existe"
+   * de "existe e o navegador é que barrou a leitura". É a única sonda que
+   * separa problema de rede de problema de permissão. */
+  try {
+    await fetch(url + '?acao=ping', { mode: 'no-cors' });
+    caso('ok', '1 · O endereço existe e respondeu',
+      'Houve resposta do servidor do Google. A rede e o endereço estão bons — ' +
+      'se o app ainda falha, o problema é de permissão da implantação, não de conexão.');
+  } catch (erro) {
+    caso('erro', '1 · Nem chegou ao servidor',
+      'Nada respondeu neste endereço. Ou a URL está errada, ou a implantação foi ' +
+      'arquivada, ou há bloqueio de rede (proxy do Tribunal, por exemplo).', erro.message);
+    veredito('<h2>Pare aqui</h2><p>Sem resposta nenhuma, os testes seguintes não ' +
+      'dizem nada de novo. Confirme a URL em Implantar → Gerenciar implantações e ' +
+      'tente de novo fora da rede do Tribunal, num 4G, para descartar proxy.</p>');
+    return;
+  }
+
+  // ---- 2. GET legível: o teste que separa permissão de código ----------
+  try {
+    const r = await fetch(url + '?acao=ping', { redirect: 'follow' });
+    const texto = await r.text();
+    const ehLogin = /accounts\.google\.com|Fa\u00e7a login|Sign in|ServiceLogin/i.test(texto);
+    const ehHtml = /^\s*</.test(texto);
+
+    if (ehLogin) {
+      caso('erro', '2 · O Google pediu login',
+        'A implantação está com “Quem pode acessar” diferente de <b>Qualquer pessoa</b>. ' +
+        'O Google devolve a tela de login em vez da resposta do script, e como essa tela ' +
+        'não traz cabeçalho de CORS, o app enxerga isso como falta de conexão. ' +
+        '<b>É a causa mais provável do seu caso.</b>', texto);
+    } else if (ehHtml) {
+      caso('aviso', '2 · Veio HTML, não JSON',
+        'Respondeu, mas não com a resposta do doGet. Costuma ser erro dentro do ' +
+        'script na hora de carregar, ou implantação apontando para uma versão antiga.', texto);
+    } else {
+      try {
+        const dados = JSON.parse(texto);
+        caso('ok', '2 · O serviço respondeu em JSON',
+          'O doGet está no ar e acessível sem login.', JSON.stringify(dados, null, 2));
+      } catch (e) {
+        caso('aviso', '2 · Resposta ilegível', 'Não é JSON válido.', texto);
+      }
+    }
+  } catch (erro) {
+    caso('erro', '2 · O navegador barrou a leitura (CORS)',
+      'O servidor respondeu, mas sem permitir que esta página lesse. Em Apps Script ' +
+      'isso quase sempre significa a mesma coisa do item anterior: a implantação não ' +
+      'está aberta a “Qualquer pessoa”.', erro.message);
+  }
+
+  // ---- 3. O POST que o app faz de verdade ------------------------------
+  try {
+    const r = await fetch(url + '?acao=entrar_admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ acao: 'entrar_admin', usuario: 'BOLSAS', senha: senha }),
+      redirect: 'follow'
+    });
+    const texto = await r.text();
+    let dados = null;
+    try { dados = JSON.parse(texto); } catch (e) {}
+
+    if (dados && dados.ok) {
+      caso('ok', '3 · Login administrativo aceito',
+        'Usuário e senha conferem e o serviço emitiu o token. Se o aplicativo ainda ' +
+        'não entra com estes mesmos dados, o que está velho é o arquivo publicado no ' +
+        'Netlify — não o serviço.', JSON.stringify(dados, null, 2));
+      diagnostico = { url: url, senha: senha };
+    } else if (dados) {
+      caso('aviso', '3 · O serviço respondeu, e recusou',
+        'Isto é <b>bom sinal</b> para a conexão: houve ida e volta. O que falhou foi ' +
+        'a credencial ou a ação — veja a mensagem abaixo.', JSON.stringify(dados, null, 2));
+    } else {
+      caso('erro', '3 · O POST não voltou em JSON',
+        'Mesma leitura do item 2: permissão da implantação ou versão antiga publicada.', texto);
+    }
+  } catch (erro) {
+    caso('erro', '3 · O POST falhou',
+      'É exatamente esta falha que o aplicativo mostra como “Sem conexão com o ' +
+      'serviço agora”.', erro.message);
+  }
+
+  // ---- 4. Estrutura da planilha, se o login passou ---------------------
+  if (diagnostico) {
+    try {
+      const r = await fetch(diagnostico.url + '?acao=diagnostico', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ acao: 'diagnostico', usuario: 'BOLSAS',
+                               senha: diagnostico.senha }),
+        redirect: 'follow'
+      });
+      const dados = await r.json();
+      if (dados.ok) {
+        caso(dados.ficha_bolsistas && dados.ficha_bolsistas.aba ? 'ok' : 'aviso',
+          '4 · O que o serviço enxerga na planilha',
+          dados.ficha_bolsistas && dados.ficha_bolsistas.aba
+            ? 'A ficha dos bolsistas foi encontrada. Se a jornada vier vazia mesmo ' +
+              'assim, o problema é de conteúdo da aba, não de configuração.'
+            : 'Nenhuma aba passou no teste de ficha de bolsista (MATRÍCULA junto de ' +
+              'CURSO, SELETIVO ou TIPO DE BOLSA). O login vai funcionar e a jornada ' +
+              'vai vir vazia.',
+          JSON.stringify(dados, null, 2));
+      } else {
+        caso('aviso', '4 · Diagnóstico recusado',
+          'A ação existe na versão nova do portal_api.gs. Se deu “Ação desconhecida”, ' +
+          'a implantação ainda está servindo o código antigo — falta criar uma NOVA ' +
+          'VERSÃO em Gerenciar implantações.', JSON.stringify(dados, null, 2));
+      }
+    } catch (erro) {
+      caso('aviso', '4 · Diagnóstico não completou', erro.message);
+    }
+  }
+
+  // ---- Veredito ---------------------------------------------------------
+  veredito(
+    '<h2>Como ler isto</h2>' +
+    '<ol>' +
+    '<li>Se o <b>1 passou</b> e o <b>2 ou 3 falharam</b>: o serviço está no ar e ' +
+    'fechado. Vá em Implantar → Gerenciar implantações → editar (lápis) → ' +
+    '<b>Quem pode acessar: Qualquer pessoa</b> → Implantar. Note que é “Qualquer ' +
+    'pessoa”, não “Qualquer pessoa com conta do Google”: esta segunda também quebra o app.</li>' +
+    '<li>Se o <b>3 passou</b> mas o app não entra: o serviço está certo e o que está ' +
+    'velho é o site. O Netlify ainda serve o config.js antigo, ou o service worker ' +
+    'guardou a casca anterior. Publique de novo e abra o app em janela anônima.</li>' +
+    '<li>Se o <b>4 disse que a ação é desconhecida</b>: você colou o portal_api.gs ' +
+    'novo mas não criou uma nova versão da implantação. Salvar não publica.</li>' +
+    '</ol>');
+});
+</script>
+</html>

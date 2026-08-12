@@ -53,7 +53,21 @@ window.CONFIG_PORTAL = {
   admin: {
     usuario: 'BOLSAS',
     senha: '',
-    lembrar_no_aparelho: true
+    lembrar_no_aparelho: true,
+
+    /* SHA-256 de `sal + '|' + senha` — exatamente o mesmo cálculo do _hash()
+     * no portal_api.gs. Serve para UMA coisa: deixar a Coordenadoria entrar na
+     * interface quando o Apps Script não responde, sem o que fica impossível
+     * até olhar o aplicativo para decidir o que corrigir.
+     *
+     * Entrar assim NÃO traz dado da planilha — não há de onde. O modo local
+     * mostra as telas e a lista de matrículas do acessos.js, e avisa isso em
+     * fita fixa. O que protege o dado continua sendo o Apps Script.
+     *
+     * Valor abaixo corresponde à senha administrativa em uso. Trocou a senha?
+     * Rode gerarHashSenhaAdmin('NovaSenha') no Apps Script e cole aqui o mesmo
+     * hash que for para ADMIN_SENHA_HASH. */
+    hash_senha: '6e8b746aff03e3bfe03e31bd67a41d1b6b90a23d44d705ab09d5ce0bbab38401'
   },
 
   unidade: 'Coordenadoria de Acompanhamento e Desenvolvimento na Carreira',

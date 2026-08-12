@@ -378,11 +378,59 @@ async function tentarEntrarAdminAutomatico() {
   const saida = await chamarApi('entrar_admin',
     { usuario: CONF_ADMIN.usuario || 'BOLSAS', senha });
   if (!saida.ok) {
-    if (!CONF_ADMIN.senha) localStorage.removeItem(CHAVES.admin);
+    if (saida.offline && await senhaAdminConfereLocalmente(senha)) {
+      adminSessao = { token: '', local: true };
+      return true;
+    }
+    if (!saida.offline && !CONF_ADMIN.senha) localStorage.removeItem(CHAVES.admin);
     return false;
   }
   adminSessao = { token: saida.token_admin };
   return true;
+}
+
+/* ---------------------------------------------------------------------------
+ * ENTRADA ADMINISTRATIVA SEM SERVIÇO
+ *
+ * Enquanto a implantação do Apps Script não estiver aberta, o app inteiro fica
+ * inacessível — inclusive para quem precisa OLHAR a interface e decidir o que
+ * mudar. Isso é um beco: para consertar é preciso ver, e para ver é preciso
+ * que já esteja consertado.
+ *
+ * A saída é conferir a senha administrativa localmente, contra o hash em
+ * config.js (`admin.hash_senha`, o mesmo SHA-256 com sal que o portal_api.gs
+ * usa). Aceita, o app entra em MODO LOCAL: navega, lista os servidores do
+ * acessos.js e mostra as telas. Não inventa dado nenhum — cada tela diz de
+ * onde veio o que está exibindo, e a fita de aviso fica visível o tempo todo.
+ *
+ * O hash não é segredo: quem tem o arquivo tem o hash, e quebrar SHA-256 de
+ * senha curta é viável. Ele não substitui o controle do servidor — o que
+ * protege o dado de verdade é o Apps Script, e no modo local não há dado da
+ * planilha para proteger, só a casca da interface.
+ * ------------------------------------------------------------------------- */
+async function sha256Hex(texto) {
+  const bits = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(texto));
+  return [...new Uint8Array(bits)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function senhaAdminConfereLocalmente(senha) {
+  const esperado = CONF_ADMIN.hash_senha || '';
+  const sal = (window.CONFIG_PORTAL && window.CONFIG_PORTAL.sal) || '';
+  if (!esperado || !sal) return false;
+  try {
+    return iguais(await sha256Hex(sal + '|' + String(senha)), esperado);
+  } catch (erro) {
+    return false;
+  }
+}
+
+function entrarModoLocalAdmin() {
+  adminSessao = { token: '', local: true };
+  papel('admin-resultados').innerHTML = '';
+  campo('admin-busca').value = '';
+  irPara('admin-busca');
+  torrada('Entrou em modo local: o serviço não respondeu. A interface funciona, ' +
+          'mas os dados da planilha não chegam.', 'alerta', 7000);
 }
 
 papel('admin-entrar').addEventListener('click', async () => {
@@ -396,6 +444,24 @@ papel('admin-entrar').addEventListener('click', async () => {
 
   msgAdmin('msg-admin-entrar', 'Verificando…', '');
   const saida = await chamarApi('entrar_admin', { usuario, senha });
+
+  /* Só quando o serviço NÃO RESPONDEU. Senha recusada pelo serviço é senha
+   * recusada — tentar de novo localmente ressuscitaria acesso revogado. */
+  if (!saida.ok && (saida.offline || !navigator.onLine)) {
+    if (await senhaAdminConfereLocalmente(senha)) {
+      if (CONF_ADMIN.lembrar_no_aparelho !== false && !CONF_ADMIN.senha) {
+        guardar(CHAVES.admin, senha);
+      }
+      msgAdmin('msg-admin-entrar', '', '');
+      campo('admin-senha').value = '';
+      entrarModoLocalAdmin();
+      return;
+    }
+    msgAdmin('msg-admin-entrar',
+      'O serviço não respondeu e a senha não confere com a guardada no aplicativo.',
+      'erro');
+    return;
+  }
 
   if (!saida.ok) {
     msgAdmin('msg-admin-entrar', saida.erro || 'Não consegui entrar.', 'erro');
@@ -431,13 +497,82 @@ campo('admin-senha').addEventListener('keydown', evento => {
   if (evento.key === 'Enter') papel('admin-entrar').click();
 });
 
+/* Estrutura da jornada com os marcos reais e NENHUM cumprido, porque neste
+ * modo não há como saber quais estão. É a interface completa sobre um cadastro
+ * em branco — serve para avaliar as telas, nunca para conferir a situação de
+ * alguém. A narrativa diz isso na cara, para ninguém confundir tela vazia com
+ * servidor em falta. */
+const MARCOS_LOCAIS = [
+  ['convocacao', 'Convocação no seletivo'],
+  ['contrato', 'Contrato / aditivo firmado'],
+  ['implantacao', 'Implantação em folha'],
+  ['curso', 'Vínculo acadêmico informado'],
+  ['comprovacao_2025_2', 'Comprovação semestral 2025.2'],
+  ['comprovacao_2026_1', 'Comprovação semestral 2026.1'],
+  ['tcc', 'Processo de comprovação do TCC'],
+  ['diploma', 'Diploma ou certificado']
+];
+
+function jornadaVaziaLocal(matricula, nome) {
+  return {
+    ok: true,
+    matricula: matricula,
+    nome: nome || '',
+    processo: '', processo_legivel: '',
+    curso: '', tipo_bolsa: '', status: '',
+    inicio_curso: '', termino_curso: '',
+    marcos: MARCOS_LOCAIS.map(([id, titulo]) => ({
+      id: id, titulo: titulo, cumprido: false, evidencia: '',
+      descricao: 'Etapa prevista no acompanhamento do auxílio-bolsa.',
+      como_cumprir: ''
+    })),
+    prazos: [],
+    percurso: { disponivel: false, principal: null, ramos: [], total: 0 },
+    conformidade: { cumpridos: 0, total: MARCOS_LOCAIS.length,
+                    percentual: 0, nivel: 'CRÍTICO' },
+    narrativa: 'MODO LOCAL — o serviço da planilha não respondeu. Esta tela ' +
+      'mostra a estrutura da jornada, sem os dados de ' +
+      (nome || 'deste servidor') + '. Nada aqui reflete a situação real dele.',
+    atualizado_em: 'sem leitura da planilha'
+  };
+}
+
+function normalizarBusca(texto) {
+  return String(texto || '').toUpperCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 async function buscarServidoresAdmin() {
   if (!adminSessao) { irPara('admin-entrar'); return; }
   const busca = campo('admin-busca').value.trim();
 
   msgAdmin('msg-admin-busca', 'Buscando…', '');
-  const saida = await chamarApi('buscar_servidores',
-    { token_admin: adminSessao.token, busca });
+
+  /* No modo local a lista vem do acessos.js — que tem matrícula e nome dos 474
+   * servidores, e só isso. Não tem curso, status nem prazo: esses moram na
+   * planilha. A tela diz isso, em vez de deixar o campo vazio parecendo dado. */
+  let saida;
+  if (adminSessao.local) {
+    const conf = window.ACESSOS_LOCAIS;
+    if (!conf || !conf.entradas) {
+      msgAdmin('msg-admin-busca',
+        'Modo local sem a lista de acessos: o arquivo acessos.js não foi ' +
+        'publicado junto com o aplicativo.', 'erro');
+      return;
+    }
+    const termo = normalizarBusca(busca);
+    const achados = Object.keys(conf.entradas)
+      .map(mat => ({ matricula: mat, nome: conf.entradas[mat].n || '',
+                     status: 'sem dados da planilha' }))
+      .filter(item => !termo || normalizarBusca(item.nome).indexOf(termo) >= 0 ||
+                      item.matricula.indexOf(busca.replace(/\D/g, '')) === 0)
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+      .slice(0, 60);
+    saida = { ok: true, resultados: achados };
+  } else {
+    saida = await chamarApi('buscar_servidores',
+      { token_admin: adminSessao.token, busca });
+  }
 
   if (!saida.ok) {
     msgAdmin('msg-admin-busca', saida.erro || 'Não consegui buscar.', 'erro');
@@ -483,8 +618,14 @@ async function abrirJornadaAdmin(matricula, nome) {
   localStorage.removeItem('bolsa.evo');
 
   torrada('Carregando…', '');
-  const saida = await chamarApi('jornada_admin',
-    { token_admin: adminSessao.token, matricula });
+
+  let saida;
+  if (adminSessao.local) {
+    saida = jornadaVaziaLocal(matricula, nome);
+  } else {
+    saida = await chamarApi('jornada_admin',
+      { token_admin: adminSessao.token, matricula });
+  }
 
   if (!saida.ok) {
     torrada(saida.erro || 'Não consegui carregar a jornada desse servidor.', 'erro');
@@ -505,9 +646,12 @@ async function abrirJornadaAdmin(matricula, nome) {
 
   const fita = papel('fita-admin');
   fita.hidden = false;
-  papel('fita-admin-texto').textContent =
-    'Modo consulta administrativa — vendo a jornada de ' +
-    (saida.nome || nome || 'servidor') + ' (mat. ' + matricula + ')';
+  papel('fita-admin-texto').textContent = adminSessao.local
+    ? 'MODO LOCAL, sem a planilha — estrutura da jornada de ' +
+      (saida.nome || nome || 'servidor') + ' (mat. ' + matricula +
+      '). Os dados reais não foram carregados.'
+    : 'Modo consulta administrativa — vendo a jornada de ' +
+      (saida.nome || nome || 'servidor') + ' (mat. ' + matricula + ')';
 
   irPara('jornada');
 }
