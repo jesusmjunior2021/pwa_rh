@@ -8,7 +8,7 @@
  * Cole aqui a URL /exec da implantação do portal_api.gs.
  */
 window.CONFIG_PORTAL = {
-  api: '',   // ex.: https://script.google.com/macros/s/AKfy.../exec
+  api: 'https://script.google.com/macros/s/AKfycbxOdaXIxhYtGRteTJr4lbYLyGcT1xbJSuV_l-e7QU7o/dev',   // ex.: https://script.google.com/macros/s/AKfy.../exec
 
   /* O MESMO valor de SAL_CODIGOS no portal_api.gs. Ele é necessário aqui para
    * o app conferir o código offline contra o acessos.js.
