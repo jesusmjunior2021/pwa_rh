@@ -30,7 +30,7 @@
  */
 'use strict';
 
-const VERSAO = 'v1.0.0';
+const VERSAO = 'v1.1.0'; // MAT-PWA-ADMIN-001: login administrativo (Coordenadoria)
 const CACHE_CASCA = 'bolsa-casca-' + VERSAO;
 const CACHE_DADOS = 'bolsa-dados-' + VERSAO;
 

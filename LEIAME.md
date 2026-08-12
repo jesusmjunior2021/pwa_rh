@@ -17,6 +17,12 @@ Troque `SAL_CODIGOS` por um segredo seu (qualquer cadeia longa e aleatória).
 Esse valor protege os códigos de acesso — se ele vazar junto com a planilha,
 os códigos deixam de estar protegidos.
 
+Troque também a senha administrativa: o login vem em `ADMIN_USUARIO`
+(padrão `BOLSAS`) e a senha em `ADMIN_SENHA_HASH`, já preenchida para
+`BOLSAS@RH`. Para usar outra senha, rode uma vez no editor
+`gerarHashSenhaAdmin('SuaNovaSenha')`, copie o hash impresso em
+*Execuções → Registros* e cole em `ADMIN_SENHA_HASH`.
+
 Rode uma vez, no editor:
 
 ```
@@ -56,6 +62,30 @@ window.CONFIG_PORTAL = { api: 'https://script.google.com/macros/s/AKfy.../exec' 
 Qualquer hospedagem estática com **HTTPS** — é requisito do PWA, não
 preferência. GitHub Pages, Netlify, Cloudflare Pages ou o próprio servidor web
 do TJMA. Suba a pasta inteira. Sem HTTPS, não instala e não notifica.
+
+---
+
+## Modo administrativo (Coordenadoria)
+
+Na tela de entrada, o link **"Sou da Coordenadoria — acesso administrativo"**
+abre um login separado (usuário/senha, ver `ADMIN_USUARIO`/`ADMIN_SENHA_HASH`
+acima). Depois de entrar, a Coordenadoria busca por matrícula ou nome e abre a
+jornada de qualquer servidor cadastrado.
+
+O que esse modo é e não é:
+
+- **Só-leitura.** As abas Enviar e Ajustes somem — a Coordenadoria vê a
+  trilha e os prazos, mas não registra entrega nem mexe no WhatsApp em nome
+  do servidor.
+- **Sessão só de memória.** O token administrativo (`token_admin`) nunca vai
+  para `localStorage`; fechar a aba ou trocar de tela para fora do app exige
+  login de novo. Ele expira sozinho a cada 12h mesmo sem sair.
+- **Não contamina o aparelho.** A jornada consultada não é gravada na cópia
+  offline do dispositivo (`bolsa.jornada`) — dado de outro servidor não fica
+  guardado no celular de quem está de plantão na Coordenadoria.
+- Backend: `entrar_admin`, `buscar_servidores` e `jornada_admin` em
+  `portal_api.gs`, todos exigindo o `token_admin` (ou usuário/senha na
+  primeira chamada).
 
 ---
 

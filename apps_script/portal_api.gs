@@ -46,6 +46,17 @@
 // ===========================================================================
 var SAL_CODIGOS = 'TROQUE-ESTE-VALOR-POR-UM-SEGREDO-SEU';
 
+/* ACESSO ADMINISTRATIVO (Coordenadoria)
+ * Login único, não por servidor — quem tem a senha entra e consulta a
+ * jornada de QUALQUER servidor cadastrado, em modo só-leitura (o app do
+ * bolsista some com as abas Enviar/Ajustes quando está em modo admin).
+ *
+ * A senha não fica em texto claro aqui: ADMIN_SENHA_HASH guarda o hash dela.
+ * Para trocar a senha, rode gerarHashSenhaAdmin('NovaSenha') uma vez, veja o
+ * hash em Execuções → Registros e cole abaixo. */
+var ADMIN_USUARIO = 'BOLSAS';
+var ADMIN_SENHA_HASH = _hash('BOLSAS@RH');
+
 var FUSO = 'America/Fortaleza';
 var ABA_BOLSISTAS = 'SERVIDORES CAEDNC';
 var ABA_ACESSO = 'PORTAL_ACESSO';
@@ -296,6 +307,14 @@ function regerarCodigo(matricula) {
   throw new Error('Matrícula não encontrada em ' + ABA_ACESSO + '.');
 }
 
+/** Rode manualmente para trocar a senha administrativa (ADMIN_SENHA_HASH).
+ *  Ex.: gerarHashSenhaAdmin('NovaSenhaForte123') — copie o hash impresso em
+ *  Execuções → Registros e cole em ADMIN_SENHA_HASH no topo do arquivo. */
+function gerarHashSenhaAdmin(senha) {
+  Logger.log(_hash(_texto(senha)));
+  return 'Hash gerado. Veja em Execuções → Registros e cole em ADMIN_SENHA_HASH.';
+}
+
 // ===========================================================================
 // AUTENTICAÇÃO
 // ===========================================================================
@@ -342,6 +361,28 @@ function _autenticar(dados) {
     return { ok: false, erro: 'Código de acesso incorreto.' };
   }
   return { ok: true, acesso: acesso, novo: true };
+}
+
+/* Token administrativo: renova sozinho a cada 12h, sem precisar de tabela de
+ * sessão — mesma ideia do _token() do servidor, só que a "época" é mais curta
+ * porque um acesso que enxerga qualquer matrícula pede sessão mais curta. */
+function _tokenAdmin() {
+  var epoca = Math.floor(Date.now() / (12 * 60 * 60 * 1000));
+  return _hash('ADMIN|' + ADMIN_SENHA_HASH + '|' + epoca);
+}
+
+function _autenticarAdmin(dados) {
+  if (dados.token_admin) {
+    if (!_iguais(dados.token_admin, _tokenAdmin())) {
+      return { ok: false, erro: 'Sessão administrativa expirada. Entre novamente.' };
+    }
+    return { ok: true };
+  }
+  if (_normalizar(dados.usuario) !== _normalizar(ADMIN_USUARIO) ||
+      !_iguais(_hash(_texto(dados.senha)), ADMIN_SENHA_HASH)) {
+    return { ok: false, erro: 'Usuário ou senha administrativa incorretos.' };
+  }
+  return { ok: true };
 }
 
 // ===========================================================================
@@ -554,6 +595,9 @@ function doPost(e) {
     if (acao === 'jornada') return _resposta(_acaoJornada(dados));
     if (acao === 'avisar_entrega') return _resposta(_acaoAvisar(dados));
     if (acao === 'consentimento') return _resposta(_acaoConsentimento(dados));
+    if (acao === 'entrar_admin') return _resposta(_acaoEntrarAdmin(dados));
+    if (acao === 'jornada_admin') return _resposta(_acaoJornadaAdmin(dados));
+    if (acao === 'buscar_servidores') return _resposta(_acaoBuscarServidores(dados));
     return _resposta({ ok: false, erro: 'Ação desconhecida: ' + acao });
   } catch (erro) {
     return _resposta({ ok: false, erro: 'Falha no serviço: ' + erro.message });
@@ -586,6 +630,62 @@ function _acaoJornada(dados) {
   var conferencia = _autenticar(dados);
   if (!conferencia.ok) return conferencia;
   return _jornada(dados.matricula);
+}
+
+// ===========================================================================
+// ADMINISTRATIVO (Coordenadoria) — consulta a jornada de qualquer servidor
+// ===========================================================================
+function _acaoEntrarAdmin(dados) {
+  var conferencia = _autenticarAdmin(dados);
+  if (!conferencia.ok) return conferencia;
+  return { ok: true, token_admin: _tokenAdmin() };
+}
+
+function _acaoJornadaAdmin(dados) {
+  var conferencia = _autenticarAdmin(dados);
+  if (!conferencia.ok) return conferencia;
+  if (!_digitos(dados.matricula)) {
+    return { ok: false, erro: 'Informe a matrícula do servidor.' };
+  }
+  var saida = _jornada(dados.matricula);
+  saida.admin = true;
+  return saida;
+}
+
+/** Busca por matrícula (prefixo) ou nome (substring), só para o modo admin.
+ *  Sem termo, devolve os 25 primeiros cadastrados — o suficiente para
+ *  conferir que a base está lendo, sem despejar a planilha inteira no app. */
+function _acaoBuscarServidores(dados) {
+  var conferencia = _autenticarAdmin(dados);
+  if (!conferencia.ok) return conferencia;
+
+  var aba = _planilha().getSheetByName(ABA_BOLSISTAS);
+  if (!aba) return { ok: true, resultados: [] };
+
+  var valores = aba.getDataRange().getValues();
+  var indices = { mapa: {} };
+  valores[0].forEach(function (nome, i) {
+    var limpo = _texto(nome);
+    if (limpo) { indices.mapa[limpo] = i; indices.mapa[_normalizar(limpo)] = i; }
+  });
+
+  var termoNome = _normalizar(dados.busca || '');
+  var termoMatricula = _digitos(dados.busca || '');
+  var resultados = [];
+  for (var i = 1; i < valores.length && resultados.length < 25; i++) {
+    var matricula = _digitos(_valor(valores[i], indices, 'MATRÍCULA') ||
+                             _valor(valores[i], indices, 'MATRICULA'));
+    var nome = _valor(valores[i], indices, 'NOME');
+    if (!matricula) continue;
+    var bate = (!termoNome && !termoMatricula) ||
+      (termoMatricula && matricula.indexOf(termoMatricula) === 0) ||
+      (termoNome && _normalizar(nome).indexOf(termoNome) >= 0);
+    if (bate) {
+      resultados.push({ matricula: matricula, nome: nome,
+                        status: _valor(valores[i], indices, 'STATUS') });
+    }
+  }
+  return { ok: true, resultados: resultados };
 }
 
 function _acaoAvisar(dados) {

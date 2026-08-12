@@ -846,3 +846,54 @@ textarea:focus-visible {
   .evo-cresceu .evo-corpo, .entra, .carimbo.batendo { animation: none; }
   .entra { opacity: 1; transform: none; }
 }
+
+/* ---------------------------------------------------------------------- */
+/* ACESSO ADMINISTRATIVO                                                   */
+/* ---------------------------------------------------------------------- */
+.acesso-admin-link {
+  margin-top: 22px;
+  border-top: 1px solid var(--traco);
+  padding-top: 18px;
+  color: var(--tinta-fraca);
+  font-size: 14px;
+}
+
+.lista-resultados {
+  list-style: none; margin: 18px 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: 8px;
+}
+
+.resultado-servidor {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  width: 100%; text-align: left; background: var(--cinza-claro);
+  border: 1px solid var(--traco); border-radius: var(--raio);
+  padding: 12px 14px; cursor: pointer; font: inherit; color: var(--tinta);
+}
+
+.resultado-servidor:active { transform: scale(.99); }
+
+.resultado-servidor .nome { font-weight: 600; font-size: 15px; }
+
+.resultado-servidor .meta {
+  font-family: var(--mono); font-size: 12px; color: var(--tinta-fraca);
+}
+
+/* Faixa de "modo consulta administrativa" no topo da jornada — cor
+   institucional (azul) para não se confundir com a faixa de laranja usada
+   quando o app está offline. */
+.fita-admin {
+  background: var(--azul); color: #fff;
+  font-size: 13px; padding: 8px 20px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; flex-wrap: wrap;
+}
+
+.fita-admin-acoes { display: flex; gap: 8px; flex-shrink: 0; }
+
+.fita-admin-acoes button {
+  background: transparent; border: 1px solid rgba(255, 255, 255, .55);
+  color: #fff; border-radius: 8px; padding: 4px 10px;
+  font-size: 12px; cursor: pointer;
+}
+
+.fita-admin-acoes button:active { transform: scale(.97); }
