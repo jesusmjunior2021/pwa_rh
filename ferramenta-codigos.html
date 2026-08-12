@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Códigos de acesso — organizar e gerar o fallback</title>
+<style>
+  :root {
+    --azul:#1B4F8A; --oliva:#6B7A3F; --laranja:#D4762A; --terracota:#A8452F;
+    --tinta:#22272B; --fraca:#626A72; --traco:#DFE3E8; --papel:#FFF;
+    --cinza-claro:#F3F5F7;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:32px 24px 80px;background:var(--cinza-claro);
+    color:var(--tinta);font:16px/1.6 ui-sans-serif,system-ui,sans-serif}
+  .folha{max-width:920px;margin:0 auto}
+  h1{font-size:26px;margin:0 0 4px}
+  .sub{color:var(--fraca);margin:0 0 28px}
+  .caixa{background:var(--papel);border:1px solid var(--traco);
+    border-radius:12px;padding:22px;margin-bottom:20px}
+  h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--fraca);margin:0 0 14px}
+  textarea{width:100%;min-height:180px;font-family:ui-monospace,Consolas,monospace;
+    font-size:12px;padding:12px;border:1px solid var(--traco);border-radius:8px;
+    resize:vertical}
+  input[type=text]{width:100%;padding:11px;border:1px solid var(--traco);
+    border-radius:8px;font-family:ui-monospace,Consolas,monospace;font-size:14px}
+  label{display:block;font-size:13px;font-weight:600;color:var(--fraca);
+    margin:14px 0 6px}
+  button{background:var(--azul);color:#fff;border:0;border-radius:8px;
+    padding:12px 20px;font-size:15px;font-weight:600;cursor:pointer;
+    margin:16px 8px 0 0}
+  button.sec{background:transparent;color:var(--azul);border:1px solid var(--azul)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .aviso{background:#FBF0E6;border-left:3px solid var(--laranja);
+    padding:14px 16px;border-radius:0 8px 8px 0;font-size:14px;margin:16px 0}
+  .grave{background:#F8E9E5;border-left-color:var(--terracota)}
+  .ok{background:#EFF2E6;border-left-color:var(--oliva)}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:14px}
+  th{text-align:left;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--fraca);border-bottom:1px solid var(--traco);padding:0 8px 6px 0}
+  td{padding:6px 8px 6px 0;border-bottom:1px solid var(--cinza-claro);
+    vertical-align:top}
+  .mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+  .selo{display:inline-block;font-size:10px;padding:2px 7px;border-radius:4px;
+    font-weight:700;letter-spacing:.04em}
+  .s-erro{background:#F8E9E5;color:var(--terracota)}
+  .s-alerta{background:#FBF0E6;color:var(--laranja)}
+  .numeros{display:flex;gap:28px;flex-wrap:wrap;margin:18px 0 0}
+  .numeros div span{display:block;font-size:26px;font-weight:700}
+  .numeros div small{color:var(--fraca);font-size:12px}
+  code{background:var(--cinza-claro);padding:2px 6px;border-radius:4px;
+    font-size:13px}
+  .barra{height:8px;background:var(--traco);border-radius:4px;overflow:hidden;
+    margin-top:12px}
+  .barra i{display:block;height:100%;background:var(--oliva);width:0;
+    transition:width .2s}
+</style>
+</head>
+<body>
+<div class="folha">
+
+<h1>Códigos de acesso — organizar e gerar o fallback</h1>
+<p class="sub">Ferramenta local. Nada sai deste computador: não há requisição de
+rede em lugar nenhum desta página. Abra o arquivo direto do disco.</p>
+
+<div class="aviso grave">
+  <strong>Por que o fallback leva hash e não o código.</strong><br>
+  Repositório privado protege o repositório, não o site publicado. Qualquer
+  pessoa que abra o PWA baixa os arquivos dele e lê tudo no DevTools do
+  navegador. Um arquivo com os 469 códigos em texto claro seria, na prática,
+  a lista completa de credenciais de 469 servidores exposta a quem tiver o
+  endereço — incidente de segurança com dado pessoal, comunicável à ANPD.<br><br>
+  O arquivo gerado aqui leva o hash de cada código (PBKDF2-SHA256, 150 mil
+  iterações). O aplicativo calcula o hash do que a pessoa digita e compara.
+  O login offline funciona igual, e o arquivo não serve para ninguém.
+</div>
+
+<div class="caixa">
+  <h2>1 · O log do Apps Script</h2>
+  <p style="margin:0;color:var(--fraca);font-size:14px">
+    Cole o conteúdo de <em>Execuções → Registros</em>, exatamente como saiu.
+    A ferramenta entende tanto o formato com carimbo de hora e "Informação"
+    quanto as linhas cruas <code>matrícula&nbsp;nome&nbsp;código</code>.
+  </p>
+  <textarea id="log" placeholder="10:28:11&#10;Informação&#10;114272 ACAYENE SANTOS LOPES 963DPT&#10;…"></textarea>
+
+  <label for="sal">Sal — o mesmo valor de <code>SAL_CODIGOS</code> no portal_api.gs</label>
+  <input type="text" id="sal" placeholder="cole aqui o segredo que você definiu">
+
+  <button id="processar">Processar</button>
+  <button id="exemplo" class="sec">Ver com dados de exemplo</button>
+  <div class="barra" id="barra" hidden><i></i></div>
+</div>
+
+<div id="saida"></div>
+
+</div>
+
+<script>
+'use strict';
+
+/* ---------------------------------------------------------------------------
+ * LEITURA DO LOG
+ *
+ * O log do Apps Script vem em blocos de três linhas: hora, "Informação", e o
+ * dado. Mas quando alguém copia da tela, a estrutura se perde de formas
+ * variadas. Em vez de exigir um formato, a ferramenta ignora tudo que não
+ * pareça um registro e trabalha com o que sobra — e diz quantas linhas
+ * descartou, para você conferir se o número bate.
+ * ------------------------------------------------------------------------- */
+
+const ALFABETO = /^[ACDEFGHJKMNPQRTUVWXY2346789]{6}$/;
+
+function analisarLog(bruto) {
+  const registros = [];
+  const descartadas = [];
+
+  for (const linhaBruta of String(bruto || '').split(/\r?\n/)) {
+    const linha = linhaBruta.trim();
+    if (!linha) continue;
+    if (/^\d{1,2}:\d{2}:\d{2}$/.test(linha)) continue;      // carimbo de hora
+    if (/^(Informação|Notificação|Execução|Aviso|Erro)/i.test(linha)) continue;
+    if (/^Códigos gerados/i.test(linha)) continue;
+
+    // O código é sempre o último campo. A matrícula, o primeiro. O nome é
+    // tudo que está no meio — inclusive quando tem espaço, acento ou uma
+    // anotação inteira colada dentro dele.
+    const partes = linha.split(/[\s\t]+/).filter(Boolean);
+    if (partes.length < 2) { descartadas.push(linha); continue; }
+
+    const codigo = partes[partes.length - 1];
+    if (!ALFABETO.test(codigo)) { descartadas.push(linha); continue; }
+
+    const matricula = partes[0].replace(/\D/g, '');
+    const nome = partes.slice(1, -1).join(' ').trim();
+
+    registros.push({ matricula, nome, codigo, original: linha });
+  }
+  return { registros, descartadas };
+}
+
+/* ---------------------------------------------------------------------------
+ * CONFERÊNCIA
+ *
+ * Esta parte não estava no pedido, e é a mais importante da ferramenta. O log
+ * é o retrato do que está na planilha — e se um registro saiu sem nome ou com
+ * a matrícula errada, o problema JÁ ESTÁ na base, não no log. Achar isso agora
+ * custa uma leitura; achar depois custa um servidor que não consegue entrar e
+ * liga para a Coordenadoria.
+ * ------------------------------------------------------------------------- */
+function conferir(registros) {
+  const problemas = [];
+  const porMatricula = new Map();
+  const porNome = new Map();
+
+  registros.forEach((r, i) => {
+    if (!r.matricula) {
+      problemas.push({ nivel: 'erro', reg: r,
+        texto: 'Sem matrícula. Este servidor não consegue entrar no app.' });
+    } else if (r.matricula.length < 4) {
+      problemas.push({ nivel: 'erro', reg: r,
+        texto: `Matrícula "${r.matricula}" tem ${r.matricula.length} dígito(s) — ` +
+               'quase certamente é lixo na célula.' });
+    } else if (r.matricula.length > 8) {
+      problemas.push({ nivel: 'alerta', reg: r,
+        texto: `Matrícula "${r.matricula}" tem ${r.matricula.length} dígitos. ` +
+               'Confira se não é um número de processo na coluna errada.' });
+    }
+
+    if (!r.nome) {
+      problemas.push({ nivel: 'erro', reg: r,
+        texto: 'Sem nome. A linha da planilha está com a coluna NOME vazia.' });
+    } else if (/^\d+$/.test(r.nome)) {
+      problemas.push({ nivel: 'erro', reg: r,
+        texto: `O nome é "${r.nome}" — um número. As colunas estão trocadas ` +
+               'nessa linha.' });
+    } else if (r.nome.length > 60) {
+      problemas.push({ nivel: 'alerta', reg: r,
+        texto: 'O nome tem uma anotação colada dentro. Isso vai aparecer no ' +
+               'e-mail e no WhatsApp que o servidor receber.' });
+    }
+
+    if (r.matricula) {
+      if (porMatricula.has(r.matricula)) {
+        problemas.push({ nivel: 'erro', reg: r,
+          texto: `Matrícula repetida (também em "${porMatricula.get(r.matricula)}"). ` +
+                 'Só um dos dois códigos vai valer — o último gerado.' });
+      } else {
+        porMatricula.set(r.matricula, r.nome || '(sem nome)');
+      }
+    }
+
+    const chaveNome = (r.nome || '').toUpperCase().replace(/\s+/g, ' ');
+    if (chaveNome && chaveNome.length > 8) {
+      if (porNome.has(chaveNome)) {
+        problemas.push({ nivel: 'alerta', reg: r,
+          texto: `Mesmo nome com matrícula diferente (${porNome.get(chaveNome)} ` +
+                 `e ${r.matricula}). Pode ser duplicidade na base.` });
+      } else {
+        porNome.set(chaveNome, r.matricula);
+      }
+    }
+  });
+
+  return problemas;
+}
+
+/* ---------------------------------------------------------------------------
+ * HASH
+ *
+ * PBKDF2-SHA256 com 150 mil iterações. SHA-256 puro seria rápido demais: com
+ * 27 caracteres possíveis em 6 posições são 387 milhões de combinações, que
+ * uma GPU percorre em segundos. Com PBKDF2 nessa contagem, cada tentativa
+ * custa milissegundos, e o ataque completo por servidor passa de dias.
+ *
+ * Não é inquebrável — nenhum arquivo verificável offline é. É a diferença
+ * entre "qualquer um lê" e "precisa de esforço dirigido e caro contra uma
+ * pessoa específica".
+ * ------------------------------------------------------------------------- */
+const ITERACOES = 150000;
+
+async function hashCodigo(codigo, sal, matricula) {
+  const chave = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(codigo),
+    { name: 'PBKDF2' }, false, ['deriveBits']);
+  // A matrícula entra no sal: sem isso, dois servidores com o mesmo código
+  // teriam o mesmo hash, e a repetição ficaria visível no arquivo.
+  const bits = await crypto.subtle.deriveBits({
+    name: 'PBKDF2',
+    salt: new TextEncoder().encode(sal + '|' + matricula),
+    iterations: ITERACOES,
+    hash: 'SHA-256'
+  }, chave, 256);
+  return [...new Uint8Array(bits)]
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/* ------------------------------------------------------------------------- */
+
+function baixar(texto, nome, tipo) {
+  const blob = new Blob([texto], { type: tipo + ';charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nome; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+function escapar(t) {
+  return String(t == null ? '' : t).replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function csvCampo(v) {
+  const t = String(v == null ? '' : v);
+  return /[";,\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+}
+
+document.getElementById('exemplo').addEventListener('click', () => {
+  document.getElementById('log').value =
+`10:28:11
+Informação
+Códigos gerados: 5
+10:28:11
+Informação
+114272 ACAYENE SANTOS LOPES 963DPT
+10:28:12
+Informação
+26959 Q3UMWU
+10:28:12
+Informação
+99978 163949 JGG4D6
+10:28:12
+Informação
+116798 DILCE PAIXÃO DOS SANTOS V24NQ9
+10:28:12
+Informação
+116789 DILCE PAIXÃO DOS SANTOS MPVKVX`;
+  document.getElementById('sal').value = 'exemplo-nao-use-em-producao';
+});
+
+document.getElementById('processar').addEventListener('click', async () => {
+  const bruto = document.getElementById('log').value;
+  const sal = document.getElementById('sal').value.trim();
+  const saida = document.getElementById('saida');
+  const barra = document.getElementById('barra');
+
+  if (!bruto.trim()) { saida.innerHTML =
+    '<div class="caixa"><div class="aviso grave">Cole o log primeiro.</div></div>';
+    return; }
+  if (!sal) { saida.innerHTML =
+    '<div class="caixa"><div class="aviso grave">O sal é obrigatório. Sem o mesmo ' +
+    'valor do portal_api.gs, os hashes não conferem com nada.</div></div>';
+    return; }
+
+  const { registros, descartadas } = analisarLog(bruto);
+  if (!registros.length) { saida.innerHTML =
+    '<div class="caixa"><div class="aviso grave">Não reconheci nenhum registro. ' +
+    'O código precisa ser a última coisa da linha, com 6 caracteres do alfabeto ' +
+    'do portal.</div></div>';
+    return; }
+
+  const problemas = conferir(registros);
+  const validos = registros.filter(r =>
+    r.matricula && r.matricula.length >= 4 && r.nome && !/^\d+$/.test(r.nome));
+
+  barra.hidden = false;
+  const preenche = barra.querySelector('i');
+  const entradas = {};
+  for (let i = 0; i < validos.length; i++) {
+    const r = validos[i];
+    entradas[r.matricula] = {
+      n: r.nome,
+      h: await hashCodigo(r.codigo, sal, r.matricula)
+    };
+    if (i % 10 === 0) {
+      preenche.style.width = Math.round((i / validos.length) * 100) + '%';
+      await new Promise(r => setTimeout(r, 0));   // deixa a barra pintar
+    }
+  }
+  preenche.style.width = '100%';
+
+  // ---- CSV de distribuição (fica com a Coordenadoria, não vai para o Git) --
+  const csv = '\uFEFF' + ['MATRICULA;NOME;CODIGO;EMAIL;WHATSAPP']
+    .concat(registros.map(r =>
+      [r.matricula, r.nome, r.codigo, '', ''].map(csvCampo).join(';')))
+    .join('\n');
+
+  // ---- acessos.js (vai para o repositório) --------------------------------
+  const arquivo =
+`/* Portal Auxílio-Bolsa TJMA — acessos.js
+ *
+ * Verificação LOCAL do código de acesso, para o aplicativo funcionar quando a
+ * planilha estiver fora do ar ou o celular sem internet.
+ *
+ * NÃO HÁ CÓDIGO NENHUM NESTE ARQUIVO. O que está aqui é o resultado de
+ * PBKDF2-SHA256 com ${ITERACOES.toLocaleString('pt-BR')} iterações sobre cada código, com a matrícula
+ * entrando no sal. O aplicativo recalcula o mesmo hash a partir do que a
+ * pessoa digita e compara. De hash não se volta para o código.
+ *
+ * POR QUE PBKDF2 E NÃO SHA-256 DIRETO
+ * O alfabeto tem 27 caracteres em 6 posições: 387 milhões de combinações. Uma
+ * GPU percorre isso em segundos com SHA-256 puro. Com PBKDF2 nesta contagem,
+ * cada tentativa custa milissegundos e o ataque contra UM servidor passa de
+ * dias. Não é inquebrável — nenhum arquivo verificável offline é — mas é a
+ * diferença entre "qualquer um lê a lista" e "precisa de esforço dirigido e
+ * caro contra uma pessoa específica".
+ *
+ * O QUE ESTE ARQUIVO PERMITE, E O QUE NÃO PERMITE
+ * Permite ENTRAR sem a planilha. Não permite ver dado novo: a jornada, os
+ * prazos e o percurso continuam vindo da planilha, e sem ela o aplicativo
+ * mostra a última cópia guardada naquele aparelho. Um servidor que nunca
+ * entrou com internet vai logar e ver uma tela vazia, com o aviso disso.
+ *
+ * A planilha continua sendo a fonte de verdade. Quando ela responde, é ela que
+ * vale — este arquivo só entra quando ela não responde.
+ *
+ * REGERAR: sempre que um código for regerado no BOLSASRH, este arquivo fica
+ * desatualizado para aquele servidor. Rode a ferramenta de novo e publique.
+ * Enquanto não publicar, o código NOVO funciona online e o ANTIGO funciona
+ * offline — e é por isso que o app tenta a planilha primeiro.
+ *
+ * Gerado em ${new Date().toLocaleString('pt-BR')} · ${validos.length} servidor(es).
+ */
+window.ACESSOS_LOCAIS = {
+  versao: 1,
+  gerado_em: ${JSON.stringify(new Date().toISOString())},
+  iteracoes: ${ITERACOES},
+  total: ${validos.length},
+  entradas: ${JSON.stringify(entradas, null, 2)}
+};
+`;
+
+  // ---- relatório de conferência ------------------------------------------
+  const erros = problemas.filter(p => p.nivel === 'erro');
+  const alertas = problemas.filter(p => p.nivel === 'alerta');
+
+  saida.innerHTML = `
+    <div class="caixa">
+      <h2>2 · O que saiu</h2>
+      <div class="numeros">
+        <div><span>${registros.length}</span><small>registros lidos</small></div>
+        <div><span style="color:var(--oliva)">${validos.length}</span><small>vão para o fallback</small></div>
+        <div><span style="color:var(--terracota)">${erros.length}</span><small>com erro</small></div>
+        <div><span style="color:var(--laranja)">${alertas.length}</span><small>a conferir</small></div>
+        <div><span>${descartadas.length}</span><small>linhas ignoradas</small></div>
+      </div>
+
+      <div class="aviso ${erros.length ? 'grave' : 'ok'}">
+        ${erros.length
+          ? `<strong>${erros.length} registro(s) ficaram de fora do fallback.</strong>
+             O problema está na planilha, não no log — essas linhas já estão com
+             matrícula ou nome errado na base. Corrija lá e gere os códigos de
+             novo para elas.`
+          : '<strong>Nenhum erro estrutural.</strong> Todos os registros entraram no fallback.'}
+      </div>
+
+      <button id="baixarCsv">⬇️ CSV para distribuição (com os códigos)</button>
+      <button id="baixarJs" class="sec">⬇️ acessos.js (só hashes — vai para o Git)</button>
+
+      <div class="aviso grave" style="margin-top:20px">
+        <strong>O CSV tem os códigos em texto claro.</strong> Ele é o material de
+        trabalho da Coordenadoria: guarde em pasta restrita, use para os envios,
+        e <em>não</em> coloque no repositório, no Drive compartilhado nem em
+        anexo de e-mail para lista. O <code>acessos.js</code> é o único dos dois
+        que pode ser publicado.
+      </div>
+    </div>
+
+    ${problemas.length ? `
+    <div class="caixa">
+      <h2>3 · Conferência da base</h2>
+      <p style="margin:0 0 8px;color:var(--fraca);font-size:14px">
+        Cada linha aqui é um problema que já existe na planilha. Achar agora
+        custa uma correção; achar depois custa um servidor que não consegue
+        entrar e liga para a Coordenadoria.
+      </p>
+      <table>
+        <thead><tr><th></th><th>Matrícula</th><th>Nome</th><th>O que está errado</th></tr></thead>
+        <tbody>
+          ${problemas.slice(0, 60).map(p => `<tr>
+            <td><span class="selo ${p.nivel === 'erro' ? 's-erro' : 's-alerta'}">
+              ${p.nivel === 'erro' ? 'ERRO' : 'CONFERIR'}</span></td>
+            <td class="mono">${escapar(p.reg.matricula) || '—'}</td>
+            <td>${escapar(p.reg.nome) || '<em>vazio</em>'}</td>
+            <td>${escapar(p.texto)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      ${problemas.length > 60
+        ? `<p style="color:var(--fraca);font-size:13px">Mostrando 60 de ${problemas.length}.</p>`
+        : ''}
+    </div>` : ''}
+
+    ${descartadas.length ? `
+    <div class="caixa">
+      <h2>Linhas que ignorei</h2>
+      <p style="color:var(--fraca);font-size:14px;margin:0 0 8px">
+        Não tinham cara de registro. Confira se nenhuma delas era um servidor de
+        verdade.</p>
+      <div class="mono" style="max-height:180px;overflow:auto;background:var(--cinza-claro);
+        padding:12px;border-radius:8px">
+        ${descartadas.slice(0, 40).map(l => escapar(l)).join('<br>')}
+      </div>
+    </div>` : ''}
+  `;
+
+  document.getElementById('baixarCsv').addEventListener('click', () =>
+    baixar(csv, 'codigos-portal-RESTRITO.csv', 'text/csv'));
+  document.getElementById('baixarJs').addEventListener('click', () =>
+    baixar(arquivo, 'acessos.js', 'text/javascript'));
+});
+</script>
+</body>
+</html>

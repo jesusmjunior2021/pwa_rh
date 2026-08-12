@@ -114,6 +114,65 @@
 
     <button class="botao primario largo" data-papel="entrar">Entrar</button>
     <p class="recado" data-papel="msg-acesso" role="status"></p>
+
+    <button class="botao fantasma largo acesso-admin-link" data-ir="admin-entrar">
+      Sou da Coordenadoria — acesso administrativo
+    </button>
+  </div>
+</main>
+
+<!-- ===================================================================== -->
+<!-- ACESSO ADMINISTRATIVO (Coordenadoria)                                 -->
+<!-- ===================================================================== -->
+<main id="admin-entrar" class="tela">
+  <header class="topo-tela">
+    <button class="voltar" data-ir="acesso" aria-label="Voltar">&larr;</button>
+    <h2>Acesso administrativo</h2>
+  </header>
+
+  <div class="miolo">
+    <p class="conduz">Uso restrito à Coordenadoria: consulta a jornada de
+      qualquer servidor cadastrado, em modo só-leitura.</p>
+
+    <label class="campo">
+      <span>Usuário</span>
+      <input type="text" autocomplete="username" data-campo="admin-usuario"
+             placeholder="usuário administrativo" maxlength="40">
+    </label>
+
+    <label class="campo">
+      <span>Senha</span>
+      <input type="password" autocomplete="current-password" data-campo="admin-senha"
+             placeholder="senha administrativa">
+    </label>
+
+    <button class="botao primario largo" data-papel="admin-entrar">Entrar</button>
+    <p class="recado" data-papel="msg-admin-entrar" role="status"></p>
+  </div>
+</main>
+
+<!-- ===================================================================== -->
+<!-- BUSCA ADMINISTRATIVA DE SERVIDOR                                      -->
+<!-- ===================================================================== -->
+<main id="admin-busca" class="tela">
+  <header class="topo-tela">
+    <button class="voltar" data-papel="admin-sair" aria-label="Sair do modo administrativo">&larr;</button>
+    <h2>Buscar servidor</h2>
+  </header>
+
+  <div class="miolo">
+    <p class="conduz">Digite a matrícula ou o nome do servidor para ver a
+      jornada dele.</p>
+
+    <label class="campo">
+      <span>Matrícula ou nome</span>
+      <input type="text" data-campo="admin-busca" placeholder="114272 ou Aldezi">
+    </label>
+
+    <button class="botao primario largo" data-papel="admin-buscar">Buscar</button>
+    <p class="recado" data-papel="msg-admin-busca" role="status"></p>
+
+    <ul class="lista-resultados" data-papel="admin-resultados"></ul>
   </div>
 </main>
 
@@ -131,6 +190,14 @@
 
   <div class="fita-offline" data-papel="fita-offline" hidden>
     Mostrando a última cópia guardada. Sem conexão agora.
+  </div>
+
+  <div class="fita-admin" data-papel="fita-admin" hidden>
+    <span data-papel="fita-admin-texto"></span>
+    <span class="fita-admin-acoes">
+      <button data-papel="admin-trocar">Trocar servidor</button>
+      <button data-papel="admin-sair-jornada">Sair do admin</button>
+    </span>
   </div>
 
   <nav class="abas" role="tablist">

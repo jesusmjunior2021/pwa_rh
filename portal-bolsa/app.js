@@ -307,6 +307,7 @@ campo('codigo').addEventListener('keydown', evento => {
 });
 
 papel('sair').addEventListener('click', () => {
+  if (adminSessao) { sairDoModoAdmin(); return; }
   sessao = null;
   localStorage.removeItem(CHAVES.sessao);
   irPara('abertura');
@@ -319,6 +320,151 @@ papel('apagar-local').addEventListener('click', () => {
   ajustes = Object.assign({}, AJUSTES_PADRAO);
   irPara('abertura');
   torrada('Tudo apagado deste aparelho.', 'ok');
+});
+
+// ---------------------------------------------------------------------------
+// ACESSO ADMINISTRATIVO (Coordenadoria)
+// ---------------------------------------------------------------------------
+/* Sessão administrativa fica só na memória — nunca em localStorage. É modo
+ * de consulta de qualquer matrícula, então não deve sobreviver a um fechar
+ * de aba sem novo login, nem ficar gravado no aparelho de quem entrou. */
+let adminSessao = null;      // { token }
+let adminAlvo = null;        // { matricula, nome } — servidor sendo consultado
+
+function msgAdmin(papelAlvo, texto, tom) {
+  const alvo = papel(papelAlvo);
+  alvo.textContent = texto;
+  alvo.dataset.tom = tom || '';
+}
+
+papel('admin-entrar').addEventListener('click', async () => {
+  const usuario = campo('admin-usuario').value.trim();
+  const senha = campo('admin-senha').value;
+
+  if (!usuario || !senha) {
+    msgAdmin('msg-admin-entrar', 'Informe usuário e senha.', 'erro');
+    return;
+  }
+
+  msgAdmin('msg-admin-entrar', 'Verificando…', '');
+  const saida = await chamarApi('entrar_admin', { usuario, senha });
+
+  if (!saida.ok) {
+    msgAdmin('msg-admin-entrar', saida.erro || 'Não consegui entrar.', 'erro');
+    vibrar([80, 60, 80]);
+    return;
+  }
+
+  adminSessao = { token: saida.token_admin };
+  campo('admin-senha').value = '';
+  msgAdmin('msg-admin-entrar', '', '');
+  papel('admin-resultados').innerHTML = '';
+  campo('admin-busca').value = '';
+  irPara('admin-busca');
+});
+
+campo('admin-senha').addEventListener('keydown', evento => {
+  if (evento.key === 'Enter') papel('admin-entrar').click();
+});
+
+async function buscarServidoresAdmin() {
+  if (!adminSessao) { irPara('admin-entrar'); return; }
+  const busca = campo('admin-busca').value.trim();
+
+  msgAdmin('msg-admin-busca', 'Buscando…', '');
+  const saida = await chamarApi('buscar_servidores',
+    { token_admin: adminSessao.token, busca });
+
+  if (!saida.ok) {
+    msgAdmin('msg-admin-busca', saida.erro || 'Não consegui buscar.', 'erro');
+    if (/sess(ã|a)o administrativa expirada/i.test(saida.erro || '')) {
+      adminSessao = null;
+      irPara('admin-entrar');
+    }
+    return;
+  }
+
+  msgAdmin('msg-admin-busca', '', '');
+  const lista = saida.resultados || [];
+  papel('admin-resultados').innerHTML = lista.length
+    ? lista.map(item => `
+        <li>
+          <button class="resultado-servidor" data-matricula="${escapar(item.matricula)}"
+                  data-nome="${escapar(item.nome)}">
+            <span class="nome">${escapar(item.nome || 'Sem nome cadastrado')}</span>
+            <span class="meta">mat. ${escapar(item.matricula)}${item.status
+              ? ' · ' + escapar(item.status) : ''}</span>
+          </button>
+        </li>`).join('')
+    : '<li class="miudo">Nenhum servidor encontrado com esse termo.</li>';
+}
+
+papel('admin-buscar').addEventListener('click', buscarServidoresAdmin);
+campo('admin-busca').addEventListener('keydown', evento => {
+  if (evento.key === 'Enter') buscarServidoresAdmin();
+});
+
+papel('admin-resultados').addEventListener('click', evento => {
+  const botao = evento.target.closest('.resultado-servidor');
+  if (!botao) return;
+  abrirJornadaAdmin(botao.dataset.matricula, botao.dataset.nome);
+});
+
+async function abrirJornadaAdmin(matricula, nome) {
+  if (!adminSessao) { irPara('admin-entrar'); return; }
+  adminAlvo = { matricula, nome };
+
+  // Evita o EVO comparar o estágio de um servidor com o do anterior e
+  // disparar a animação de "cresceu" comparando duas pessoas diferentes.
+  localStorage.removeItem('bolsa.evo');
+
+  torrada('Carregando…', '');
+  const saida = await chamarApi('jornada_admin',
+    { token_admin: adminSessao.token, matricula });
+
+  if (!saida.ok) {
+    torrada(saida.erro || 'Não consegui carregar a jornada desse servidor.', 'erro');
+    if (/sess(ã|a)o administrativa expirada/i.test(saida.erro || '')) {
+      adminSessao = null;
+      irPara('admin-entrar');
+    }
+    return;
+  }
+
+  papel('fita-offline').hidden = true;
+  jornada = saida;
+  desenharTudo();
+
+  $$('.aba[data-painel="p-enviar"], .aba[data-painel="p-ajustes"]')
+    .forEach(aba => { aba.hidden = true; });
+  abrirPainel('p-trilha');
+
+  const fita = papel('fita-admin');
+  fita.hidden = false;
+  papel('fita-admin-texto').textContent =
+    'Modo consulta administrativa — vendo a jornada de ' +
+    (saida.nome || nome || 'servidor') + ' (mat. ' + matricula + ')';
+
+  irPara('jornada');
+}
+
+function sairDoModoAdmin() {
+  adminSessao = null;
+  adminAlvo = null;
+  localStorage.removeItem('bolsa.evo');
+  papel('fita-admin').hidden = true;
+  $$('.aba[data-painel="p-enviar"], .aba[data-painel="p-ajustes"]')
+    .forEach(aba => { aba.hidden = false; });
+  jornada = null;
+  irPara('abertura');
+}
+
+papel('admin-sair').addEventListener('click', sairDoModoAdmin);
+papel('admin-sair-jornada').addEventListener('click', sairDoModoAdmin);
+
+papel('admin-trocar').addEventListener('click', () => {
+  papel('fita-admin').hidden = true;
+  irPara('admin-busca');
 });
 
 // ---------------------------------------------------------------------------
