@@ -30,7 +30,7 @@
  */
 'use strict';
 
-const VERSAO = 'v1.1.0'; // MAT-PWA-ADMIN-001: login administrativo (Coordenadoria)
+const VERSAO = 'v1.1.2'; // MAT-PWA-ADMIN-001: config.js fora do cache-first (endereco do servico)
 const CACHE_CASCA = 'bolsa-casca-' + VERSAO;
 const CACHE_DADOS = 'bolsa-dados-' + VERSAO;
 
@@ -117,6 +117,29 @@ self.addEventListener('fetch', evento => {
           ok: false, offline: true,
           erro: 'Sem conexão e sem cópia guardada desta consulta.'
         }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+      }
+    })());
+    return;
+  }
+
+  /* config.js é EXCEÇÃO à regra da casca. Ele guarda o endereço do serviço, o
+   * único valor que muda depois da publicação. Se ficasse em cache-primeiro,
+   * trocar a URL /exec não teria efeito nenhum em quem já abriu o aplicativo
+   * uma vez: o navegador continuaria servindo a cópia antiga (vazia) e a
+   * pessoa continuaria vendo "o endereço do serviço não foi configurado".
+   * Rede primeiro, cache só quando não há rede. */
+  if (url.origin === location.origin && /\/config\.js$/.test(url.pathname)) {
+    evento.respondWith((async () => {
+      try {
+        const resposta = await fetch(requisicao, { cache: 'no-store' });
+        if (resposta && resposta.ok) {
+          const cache = await caches.open(CACHE_CASCA);
+          cache.put(requisicao, resposta.clone());
+        }
+        return resposta;
+      } catch (erro) {
+        return (await caches.match(requisicao)) ||
+               new Response('', { status: 504 });
       }
     })());
     return;

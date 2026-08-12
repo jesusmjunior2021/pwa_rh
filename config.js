@@ -18,7 +18,7 @@ window.CONFIG_PORTAL = {
    * sal, é o custo do PBKDF2: 150 mil iterações por tentativa. O sal continua
    * fazendo o trabalho dele, que é impedir tabela pré-calculada servir para
    * duas instalações diferentes. */
-  sal: '',
+  sal: '6lhpKWyeg8CHnzrtlzm-1ERo4yonm8ES',
   unidade: 'Coordenadoria de Acompanhamento e Desenvolvimento na Carreira',
   email: 'cocarreira@tjma.jus.br'
 };

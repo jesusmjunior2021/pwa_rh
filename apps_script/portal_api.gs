@@ -44,7 +44,7 @@
 // ===========================================================================
 // CONFIGURAÇÃO
 // ===========================================================================
-var SAL_CODIGOS = 'TROQUE-ESTE-VALOR-POR-UM-SEGREDO-SEU';
+var SAL_CODIGOS = '6lhpKWyeg8CHnzrtlzm-1ERo4yonm8ES';
 
 /* ACESSO ADMINISTRATIVO (Coordenadoria)
  * Login único, não por servidor — quem tem a senha entra e consulta a
