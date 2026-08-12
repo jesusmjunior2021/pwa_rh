@@ -52,7 +52,7 @@ window.CONFIG_PORTAL = {
    *   sem esse custo. */
   admin: {
     usuario: 'BOLSAS',
-    senha: '',
+    senha: 'BOLSAS@RH',
     lembrar_no_aparelho: true,
 
     /* SHA-256 de `sal + '|' + senha` — exatamente o mesmo cálculo do _hash()
