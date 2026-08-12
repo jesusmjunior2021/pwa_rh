@@ -78,6 +78,38 @@ var ABA_SAL = 'SAL_CODIGOS';
 /* Espelho calculado da árvore de processos, gravado pela ingestão do Digidoc. */
 var ABA_ARVORE = 'ARVORE_PROCESSOS';
 
+/* Pasta compartilhada da Coordenadoria onde ficam as fotos e PDFs enviados pelo
+ * PWA. Dentro dela o script cria uma subpasta por servidor, nomeada
+ * "matrícula - NOME", para a busca no Drive continuar servindo de plano B.
+ *
+ * A pasta NÃO fica pública: quem abre o link é quem já tem acesso a ela. O
+ * servidor que enviou não consegue reabrir o próprio arquivo pelo link — e
+ * isso é proposital, porque o comprovante, depois de enviado, é peça da
+ * Coordenadoria, não arquivo pessoal editável. */
+var ID_PASTA_COMPROVACOES = '1fh6L9plxoYk2d8ouLe_RzmVJMmeEJ10D';
+
+/* Teto do arquivo, em bytes, já contando o inchaço de 33% do base64. O celular
+ * do servidor reduz a foto antes de mandar; este limite é a rede de segurança
+ * para PDF grande, que ninguém reduz. */
+var LIMITE_ARQUIVO = 9 * 1024 * 1024;
+
+var ABA_COMPROVACOES = 'COMPROVACOES_PWA';
+var COL_COMPROVACOES = [
+  'ID', 'MATRICULA', 'NOME', 'CARGO', 'COMARCA',
+  'TIPO', 'TIPO_TEXTO', 'CAMPOS_COMPROVADOS', 'PROCESSO_DIGIDOC',
+  'ARQUIVO_NOME', 'ARQUIVO_ID', 'ARQUIVO_LINK',
+  'TEXTO_EXTRAIDO', 'DADOS_EXTRAIDOS', 'EXTRACAO_STATUS',
+  'CONSENTIMENTO', 'CONSENTIMENTO_VERSAO', 'CONSENTIMENTO_EM',
+  'ENVIADO_EM', 'RECEBIDO_EM', 'SITUACAO',
+  'VALIDADO_POR', 'VALIDADO_EM', 'CAMPOS_APLICADOS', 'MOTIVO_RECUSA'
+];
+
+/* Versão do texto de responsabilidade que a pessoa aceitou. Guardar a versão,
+ * e não só o "sim", é o que permite provar DEPOIS o que exatamente estava
+ * escrito na tela no dia — texto de termo muda, e "concordou" sem saber com o
+ * quê não prova nada. */
+var VERSAO_TERMO = '2026-08-1';
+
 var ABA_ACESSO = 'PORTAL_ACESSO';
 var ABA_AVISOS = 'PORTAL_AVISOS';
 var ABA_CONSENTIMENTO = 'PORTAL_CONSENTIMENTO';
@@ -175,8 +207,28 @@ function _iguais(a, b) {
   return diferenca === 0;
 }
 
+/* A PLANILHA
+ *
+ * Vazio = o script está VINCULADO à planilha (Extensões → Apps Script) e usa a
+ * planilha que o hospeda. É o modo normal.
+ *
+ * Preenchido = o script é AUTÔNOMO, vive numa conta própria e abre a planilha
+ * pelo ID. Serve para o caso em que a política do Workspace do Tribunal não
+ * deixa publicar App da Web para "Qualquer pessoa": aí o script passa para uma
+ * conta que possa, e essa conta recebe acesso de edição à planilha. O dado
+ * continua na planilha institucional; só muda quem executa.
+ *
+ * O ID está na URL da planilha, entre /d/ e /edit. */
+var ID_PLANILHA = '';
+
 function _planilha() {
-  return SpreadsheetApp.getActiveSpreadsheet();
+  if (ID_PLANILHA) return SpreadsheetApp.openById(ID_PLANILHA);
+  var ativa = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ativa) {
+    throw new Error('Script autônomo sem ID_PLANILHA preenchido. Cole o ID da ' +
+                    'planilha na constante ID_PLANILHA, no topo do arquivo.');
+  }
+  return ativa;
 }
 
 /* ---------------------------------------------------------------------------
@@ -796,6 +848,8 @@ function doPost(e) {
     if (acao === 'jornada') return _resposta(_acaoJornada(dados));
     if (acao === 'avisar_entrega') return _resposta(_acaoAvisar(dados));
     if (acao === 'consentimento') return _resposta(_acaoConsentimento(dados));
+    if (acao === 'enviar_comprovacao') return _resposta(_acaoEnviarComprovacao(dados));
+    if (acao === 'minhas_comprovacoes') return _resposta(_acaoMinhasComprovacoes(dados));
     if (acao === 'entrar_admin') return _resposta(_acaoEntrarAdmin(dados));
     if (acao === 'jornada_admin') return _resposta(_acaoJornadaAdmin(dados));
     if (acao === 'buscar_servidores') return _resposta(_acaoBuscarServidores(dados));
@@ -927,6 +981,129 @@ function _acaoBuscarServidores(dados) {
   return { ok: true, resultados: resultados };
 }
 
+/* ---------------------------------------------------------------------------
+ * COMPROVAÇÕES ENVIADAS PELO PWA
+ *
+ * O que este fluxo é: um canal de entrada rápido, que guarda a foto no Drive da
+ * Coordenadoria e já deixa os campos pré-preenchidos para conferência.
+ *
+ * O que ele NÃO é: substituto do Digidoc. A validação final continua exigindo o
+ * documento protocolado, e por isso o número do processo é pedido no envio e
+ * repetido em cada tela. Se este canal virasse via de comprovação autônoma, a
+ * Coordenadoria estaria decidindo sobre foto de celular sem peça nos autos.
+ * ------------------------------------------------------------------------- */
+function _pastaDoServidor(matricula, nome) {
+  var raiz = DriveApp.getFolderById(ID_PASTA_COMPROVACOES);
+  var rotulo = _digitos(matricula) + ' - ' + _texto(nome).toUpperCase();
+  var existentes = raiz.getFoldersByName(rotulo);
+  return existentes.hasNext() ? existentes.next() : raiz.createFolder(rotulo);
+}
+
+function _acaoEnviarComprovacao(dados) {
+  var conferencia = _autenticar(dados);
+  if (!conferencia.ok) return conferencia;
+
+  if (!dados.consentimento) {
+    return { ok: false, erro: 'É preciso aceitar o termo de responsabilidade antes de enviar.' };
+  }
+  if (!dados.arquivo_b64) {
+    return { ok: false, erro: 'Nenhum arquivo veio junto com o envio.' };
+  }
+  if (dados.arquivo_b64.length > LIMITE_ARQUIVO) {
+    return { ok: false, erro: 'Arquivo grande demais. Use uma foto ou um PDF de até 6 MB.' };
+  }
+
+  var aba = _aba(ABA_COMPROVACOES, COL_COMPROVACOES);
+  var indices = _indices(aba);
+
+  /* Reenvio da fila offline não pode virar segundo arquivo no Drive nem
+   * segunda linha para o analista conferir duas vezes o mesmo papel. */
+  if (aba.getLastRow() > 1) {
+    var ids = aba.getRange(2, indices.mapa.ID + 1, aba.getLastRow() - 1, 1).getValues();
+    for (var i = 0; i < ids.length; i++) {
+      if (_texto(ids[i][0]) === _texto(dados.id)) return { ok: true, repetido: true };
+    }
+  }
+
+  var matricula = _digitos(dados.matricula);
+  var nome = (conferencia.acesso
+    ? _valor(conferencia.acesso.valores, conferencia.acesso.indices, 'NOME')
+    : '') || (conferencia.sal ? conferencia.sal.nome : '') || _texto(dados.nome);
+
+  var arquivo;
+  try {
+    var bytes = Utilities.base64Decode(dados.arquivo_b64);
+    var blob = Utilities.newBlob(bytes,
+      _texto(dados.arquivo_tipo) || 'application/octet-stream',
+      _nomeDeArquivo(dados, matricula));
+    arquivo = _pastaDoServidor(matricula, nome).createFile(blob);
+  } catch (erro) {
+    return { ok: false, erro: 'Não consegui guardar o arquivo no Drive: ' + erro.message };
+  }
+
+  var linha = new Array(indices.largura).fill('');
+  linha[indices.mapa.ID] = _texto(dados.id);
+  linha[indices.mapa.MATRICULA] = matricula;
+  linha[indices.mapa.NOME] = nome;
+  linha[indices.mapa.CARGO] = _texto(dados.cargo);
+  linha[indices.mapa.COMARCA] = _texto(dados.comarca);
+  linha[indices.mapa.TIPO] = _texto(dados.tipo);
+  linha[indices.mapa.TIPO_TEXTO] = _texto(dados.tipo_texto);
+  linha[indices.mapa.CAMPOS_COMPROVADOS] = _texto(dados.campos);
+  linha[indices.mapa.PROCESSO_DIGIDOC] = _digitos(dados.processo_digidoc);
+  linha[indices.mapa.ARQUIVO_NOME] = arquivo.getName();
+  linha[indices.mapa.ARQUIVO_ID] = arquivo.getId();
+  linha[indices.mapa.ARQUIVO_LINK] = arquivo.getUrl();
+  linha[indices.mapa.EXTRACAO_STATUS] = 'PENDENTE';
+  linha[indices.mapa.CONSENTIMENTO] = 'SIM';
+  linha[indices.mapa.CONSENTIMENTO_VERSAO] = VERSAO_TERMO;
+  linha[indices.mapa.CONSENTIMENTO_EM] = _texto(dados.consentimento_em) || _agora();
+  linha[indices.mapa.ENVIADO_EM] = _texto(dados.criado_em);
+  linha[indices.mapa.RECEBIDO_EM] = _agora();
+  linha[indices.mapa.SITUACAO] = 'AGUARDANDO VALIDACAO';
+
+  aba.getRange(aba.getLastRow() + 1, 1, 1, indices.largura).setValues([linha]);
+  return { ok: true, link: arquivo.getUrl() };
+}
+
+function _nomeDeArquivo(dados, matricula) {
+  var carimbo = Utilities.formatDate(new Date(), FUSO, 'yyyyMMdd-HHmmss');
+  var tipo = _texto(dados.tipo).toUpperCase().replace(/[^A-Z0-9]+/g, '-') || 'COMPROVANTE';
+  var extensao = (_texto(dados.arquivo_nome).match(/\.[a-z0-9]{2,5}$/i) || ['.jpg'])[0];
+  return matricula + '_' + tipo + '_' + carimbo + extensao.toLowerCase();
+}
+
+/* O que o servidor vê das próprias entregas. Só as colunas que dizem respeito a
+ * ele: não devolve o texto extraído nem o link do Drive, que são material de
+ * trabalho interno. */
+function _acaoMinhasComprovacoes(dados) {
+  var conferencia = _autenticar(dados);
+  if (!conferencia.ok) return conferencia;
+
+  var planilha = _planilha();
+  var aba = planilha.getSheetByName(ABA_COMPROVACOES);
+  if (!aba || aba.getLastRow() < 2) return { ok: true, envios: [] };
+
+  var indices = _indices(aba);
+  var valores = aba.getRange(2, 1, aba.getLastRow() - 1, indices.largura).getValues();
+  var alvo = _digitos(dados.matricula);
+  var envios = [];
+
+  for (var i = 0; i < valores.length; i++) {
+    if (_digitos(valores[i][indices.mapa.MATRICULA]) !== alvo) continue;
+    envios.push({
+      id: _texto(valores[i][indices.mapa.ID]),
+      tipo_texto: _texto(valores[i][indices.mapa.TIPO_TEXTO]),
+      processo: _texto(valores[i][indices.mapa.PROCESSO_DIGIDOC]),
+      enviado_em: _texto(valores[i][indices.mapa.RECEBIDO_EM]),
+      situacao: _texto(valores[i][indices.mapa.SITUACAO]),
+      motivo: _texto(valores[i][indices.mapa.MOTIVO_RECUSA])
+    });
+  }
+  envios.reverse();
+  return { ok: true, envios: envios };
+}
+
 function _acaoAvisar(dados) {
   var conferencia = _autenticar(dados);
   if (!conferencia.ok) return conferencia;
@@ -945,7 +1122,11 @@ function _acaoAvisar(dados) {
     }
   }
 
-  var nome = _valor(conferencia.acesso.valores, conferencia.acesso.indices, 'NOME');
+  /* Quem entrou pelo SAL_CODIGOS não tem linha no PORTAL_ACESSO — ler
+   * conferencia.acesso direto derrubava o aviso com erro de referência. */
+  var nome = (conferencia.acesso
+    ? _valor(conferencia.acesso.valores, conferencia.acesso.indices, 'NOME')
+    : '') || (conferencia.sal ? conferencia.sal.nome : '');
   var linha = new Array(indices.largura).fill('');
   linha[indices.mapa.ID] = _texto(dados.id);
   linha[indices.mapa.MATRICULA] = _digitos(dados.matricula);

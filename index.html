@@ -205,6 +205,7 @@
     <button role="tab" class="aba" data-painel="p-prazos">Prazos</button>
     <button role="tab" class="aba" data-painel="p-percurso">Processo</button>
     <button role="tab" class="aba" data-painel="p-enviar">Enviar</button>
+    <button role="tab" class="aba" data-painel="p-comprovar">Comprovar</button>
     <button role="tab" class="aba" data-painel="p-ajustes">Ajustes</button>
   </nav>
 
@@ -302,6 +303,61 @@
       <p class="miudo">Estes avisos foram guardados no aparelho e serão enviados
         assim que houver internet.</p>
       <ul data-papel="lista-fila"></ul>
+    </div>
+  </section>
+
+  <!-- ---- comprovar: foto ou PDF direto do aparelho ---- -->
+  <section class="painel" id="p-comprovar">
+    <p class="conduz">Mande a foto do documento agora. A Coordenadoria já recebe
+      com seus dados preenchidos e confere mais rápido.</p>
+
+    <div class="alerta-digidoc">
+      <strong>Isto não substitui o Digidoc.</strong> O comprovante continua tendo
+      que ser protocolado. O que este envio faz é adiantar a conferência — por
+      isso o número do processo é obrigatório aqui.
+    </div>
+
+    <label class="campo">
+      <span>O que este documento comprova</span>
+      <select data-campo="comp-tipo"></select>
+    </label>
+
+    <label class="campo">
+      <span>Número do processo no Digidoc</span>
+      <input type="text" inputmode="numeric" data-campo="comp-processo"
+             placeholder="27588/2023">
+    </label>
+
+    <label class="campo">
+      <span>Foto ou PDF do documento</span>
+      <input type="file" data-campo="comp-arquivo"
+             accept="image/*,application/pdf" capture="environment">
+    </label>
+    <p class="miudo" data-papel="comp-arquivo-info"></p>
+    <img data-papel="comp-previa" alt="Prévia do documento escolhido" hidden>
+
+    <details class="termo">
+      <summary>Termo de responsabilidade — leia antes de aceitar</summary>
+      <p>Declaro que o documento enviado é verdadeiro, foi emitido por quem nele
+        consta e corresponde ao que o edital do auxílio-bolsa exige para esta
+        etapa. Estou ciente de que enviar documento falso, adulterado ou alheio,
+        para obter vantagem, sujeita-me à apuração administrativa e às sanções
+        penais cabíveis, entre elas as dos artigos 297 a 299 do Código Penal, a
+        qualquer tempo em que a Administração identificar a irregularidade, com
+        devolução dos valores recebidos indevidamente.</p>
+    </details>
+
+    <label class="caixa">
+      <input type="checkbox" data-campo="comp-aceite">
+      <span>Li o termo acima e confirmo que o documento é verdadeiro.</span>
+    </label>
+
+    <button class="botao primario largo" data-papel="comp-enviar">Enviar comprovante</button>
+    <p class="recado" data-papel="msg-comprovar" role="status"></p>
+
+    <div class="fila-pendente" data-papel="comp-lista-caixa" hidden>
+      <h3>Seus envios</h3>
+      <ul data-papel="comp-lista"></ul>
     </div>
   </section>
 

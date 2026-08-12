@@ -951,3 +951,48 @@ textarea:focus-visible {
 .percurso-parado {
   color: var(--terracota); font-size: .82rem; margin-left: var(--e2);
 }
+
+/* ---------------------------------------------------------------------------
+   COMPROVAR — envio de foto/PDF
+   ------------------------------------------------------------------------ */
+.alerta-digidoc {
+  background: #FBF0E6;
+  border: 1px solid var(--laranja);
+  border-left: 4px solid var(--laranja);
+  border-radius: var(--raio);
+  padding: var(--e3) var(--e4);
+  margin-bottom: var(--e4);
+  font-size: .92rem;
+}
+
+[data-papel="comp-previa"] {
+  display: block; max-width: 100%; max-height: 320px;
+  margin: var(--e3) 0; border-radius: var(--raio);
+  border: 1px solid var(--traco);
+}
+
+.termo {
+  border: 1px solid var(--traco);
+  border-radius: var(--raio);
+  padding: var(--e3) var(--e4);
+  margin: var(--e4) 0 var(--e3);
+  background: var(--superficie);
+}
+.termo summary { cursor: pointer; font-weight: 600; font-size: .92rem; }
+.termo p { font-size: .88rem; color: var(--tinta-fraca); margin: var(--e3) 0 0; }
+
+.caixa {
+  display: flex; align-items: flex-start; gap: var(--e3);
+  font-size: .95rem; margin-bottom: var(--e4);
+}
+.caixa input { margin-top: 3px; flex-shrink: 0; }
+
+.situacao-envio {
+  display: inline-block; font-size: .78rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .03em;
+  padding: 2px var(--e2); border-radius: 999px;
+  background: var(--cinza-claro); color: var(--tinta-fraca);
+}
+[data-tom="ok"] .situacao-envio    { background: #EFF2E6; color: var(--oliva); }
+[data-tom="erro"] .situacao-envio  { background: #FAEDEA; color: var(--terracota); }
+[data-tom="espera"] .situacao-envio{ background: #FBF0E6; color: var(--laranja); }

@@ -640,7 +640,7 @@ async function abrirJornadaAdmin(matricula, nome) {
   jornada = saida;
   desenharTudo();
 
-  $$('.aba[data-painel="p-enviar"], .aba[data-painel="p-ajustes"]')
+  $$('.aba[data-painel="p-enviar"], .aba[data-painel="p-comprovar"], .aba[data-painel="p-ajustes"]')
     .forEach(aba => { aba.hidden = true; });
   abrirPainel('p-trilha');
 
@@ -661,7 +661,7 @@ function sairDoModoAdmin() {
   adminAlvo = null;
   localStorage.removeItem('bolsa.evo');
   papel('fita-admin').hidden = true;
-  $$('.aba[data-painel="p-enviar"], .aba[data-painel="p-ajustes"]')
+  $$('.aba[data-painel="p-enviar"], .aba[data-painel="p-comprovar"], .aba[data-painel="p-ajustes"]')
     .forEach(aba => { aba.hidden = false; });
   jornada = null;
   irPara('abertura');
@@ -721,6 +721,7 @@ function desenharTudo() {
   desenharTrilha();
   desenharPrazos();
   desenharPercurso();
+  preencherTiposDeComprovacao();
   preencherTiposDeEnvio();
   desenharFila();
 }
@@ -1106,6 +1107,198 @@ async function registrarSincronizacao() {
     // periodicSync é opcional e não existe em todo navegador. A ausência não
     // quebra nada — só reduz o alcance dos avisos com o app fechado.
   }
+}
+
+// ---------------------------------------------------------------------------
+// COMPROVAR — foto ou PDF direto do aparelho
+// ---------------------------------------------------------------------------
+/* O arquivo trafega em base64 dentro do JSON, porque Apps Script não recebe
+ * multipart. Base64 incha 33%, e foto de celular hoje sai com 4 a 8 MB — sem
+ * reduzir antes, metade dos envios morreria no limite de payload. Por isso a
+ * imagem passa por um canvas: 1600px no maior lado, JPEG a 72%. Documento
+ * fotografado continua perfeitamente legível nesse tamanho, e o arquivo cai
+ * para algo entre 200 e 600 KB.
+ *
+ * PDF não passa por isso — não há como reduzir sem reescrever o arquivo — e por
+ * isso o limite do servidor existe e a mensagem de recusa precisa ser clara. */
+let compArquivo = null;
+
+const TETO_LADO = 1600;
+const QUALIDADE = 0.72;
+
+function msgComprovar(texto, tom) {
+  const alvo = papel('msg-comprovar');
+  alvo.textContent = texto;
+  alvo.dataset.tom = tom || '';
+}
+
+function preencherTiposDeComprovacao() {
+  const seletor = campo('comp-tipo');
+  if (!seletor) return;
+  const marcos = jornada.marcos || [];
+  const pendentes = marcos.filter(m => !m.cumprido);
+  const opcoes = pendentes.length ? pendentes : marcos;
+  seletor.innerHTML = opcoes.map(m =>
+    `<option value="${escapar(m.id)}">${escapar(m.titulo)}</option>`).join('') +
+    '<option value="carteira_funcional">Carteira funcional (atualizar meus dados)</option>' +
+    '<option value="outro">Outro documento</option>';
+}
+
+function reduzirImagem(arquivo) {
+  return new Promise((resolve, reject) => {
+    const leitor = new FileReader();
+    leitor.onerror = () => reject(new Error('Não consegui ler o arquivo.'));
+    leitor.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Não consegui abrir a imagem.'));
+      img.onload = () => {
+        const escala = Math.min(1, TETO_LADO / Math.max(img.width, img.height));
+        const tela = document.createElement('canvas');
+        tela.width = Math.round(img.width * escala);
+        tela.height = Math.round(img.height * escala);
+        const ctx = tela.getContext('2d');
+        ctx.fillStyle = '#fff';                    // PNG com transparência vira preto sem isto
+        ctx.fillRect(0, 0, tela.width, tela.height);
+        ctx.drawImage(img, 0, 0, tela.width, tela.height);
+        const dados = tela.toDataURL('image/jpeg', QUALIDADE);
+        resolve({ b64: dados.split(',')[1], tipo: 'image/jpeg', previa: dados });
+      };
+      img.src = leitor.result;
+    };
+    leitor.readAsDataURL(arquivo);
+  });
+}
+
+function lerComoBase64(arquivo) {
+  return new Promise((resolve, reject) => {
+    const leitor = new FileReader();
+    leitor.onerror = () => reject(new Error('Não consegui ler o arquivo.'));
+    leitor.onload = () => resolve({
+      b64: String(leitor.result).split(',')[1],
+      tipo: arquivo.type || 'application/octet-stream',
+      previa: null
+    });
+    leitor.readAsDataURL(arquivo);
+  });
+}
+
+function tamanhoLegivel(bytes) {
+  return bytes < 1024 * 1024
+    ? Math.round(bytes / 1024) + ' KB'
+    : (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+campo('comp-arquivo').addEventListener('change', async evento => {
+  const arquivo = evento.target.files && evento.target.files[0];
+  compArquivo = null;
+  papel('comp-previa').hidden = true;
+  papel('comp-arquivo-info').textContent = '';
+  if (!arquivo) return;
+
+  msgComprovar('Preparando o arquivo…', '');
+  try {
+    const ehImagem = /^image\//.test(arquivo.type);
+    const pronto = ehImagem ? await reduzirImagem(arquivo) : await lerComoBase64(arquivo);
+    compArquivo = { nome: arquivo.name, tipo: pronto.tipo, b64: pronto.b64 };
+
+    const bytes = Math.round(pronto.b64.length * 0.75);
+    papel('comp-arquivo-info').textContent = arquivo.name + ' · ' + tamanhoLegivel(bytes) +
+      (ehImagem ? ' (reduzido para envio)' : '');
+
+    if (pronto.previa) {
+      papel('comp-previa').src = pronto.previa;
+      papel('comp-previa').hidden = false;
+    }
+    msgComprovar('', '');
+  } catch (erro) {
+    msgComprovar(erro.message, 'erro');
+  }
+});
+
+papel('comp-enviar').addEventListener('click', async () => {
+  if (!sessao) { torrada('Entre novamente para enviar.', 'erro'); return; }
+
+  const processo = campo('comp-processo').value.trim();
+  if (!campo('comp-aceite').checked) {
+    msgComprovar('Marque o aceite do termo antes de enviar.', 'erro'); return;
+  }
+  if (!compArquivo) {
+    msgComprovar('Escolha a foto ou o PDF do documento.', 'erro'); return;
+  }
+  /* Processo obrigatório de propósito: sem ele o comprovante chega solto, e a
+   * Coordenadoria fica com uma foto que não sabe a que autos pertence. */
+  if (processo.replace(/\D/g, '').length < 6) {
+    msgComprovar('Informe o número do processo no Digidoc. Sem ele o comprovante ' +
+                 'não pode ser vinculado.', 'erro');
+    return;
+  }
+
+  const marco = campo('comp-tipo').selectedOptions[0];
+  const envio = {
+    id: 'CP-' + Date.now().toString(36),
+    matricula: sessao.matricula,
+    token: sessao.token,
+    nome: jornada.nome || '',
+    cargo: jornada.cargo || '',
+    comarca: jornada.comarca || '',
+    tipo: campo('comp-tipo').value,
+    tipo_texto: marco ? marco.textContent : '',
+    campos: marco ? marco.textContent : '',
+    processo_digidoc: processo,
+    arquivo_nome: compArquivo.nome,
+    arquivo_tipo: compArquivo.tipo,
+    arquivo_b64: compArquivo.b64,
+    consentimento: true,
+    consentimento_em: new Date().toISOString(),
+    criado_em: new Date().toISOString()
+  };
+
+  msgComprovar('Enviando o documento…', '');
+  const saida = await chamarApi('enviar_comprovacao', envio);
+
+  if (saida.ok) {
+    msgComprovar('Recebido. A Coordenadoria vai conferir e você verá o resultado ' +
+                 'aqui mesmo. Continue com o protocolo no Digidoc.', 'ok');
+    tocar('ok'); vibrar([120]);
+    compArquivo = null;
+    campo('comp-arquivo').value = '';
+    campo('comp-aceite').checked = false;
+    papel('comp-previa').hidden = true;
+    papel('comp-arquivo-info').textContent = '';
+    carregarMinhasComprovacoes();
+    return;
+  }
+
+  /* Arquivo não vai para a fila offline: guardar vários megabytes de base64 no
+   * localStorage estoura a cota e derruba o resto do aplicativo. A pessoa é
+   * avisada para repetir com internet, o que é honesto e não perde nada — o
+   * documento continua no aparelho dela. */
+  msgComprovar(saida.offline
+    ? 'Sem conexão agora. O documento não foi enviado — repita quando tiver internet.'
+    : (saida.erro || 'Não consegui enviar o documento.'), 'erro');
+});
+
+async function carregarMinhasComprovacoes() {
+  if (!sessao) return;
+  const caixa = papel('comp-lista-caixa');
+  const saida = await chamarApi('minhas_comprovacoes',
+    { matricula: sessao.matricula, token: sessao.token });
+
+  const envios = (saida.ok && saida.envios) || [];
+  if (!envios.length) { caixa.hidden = true; return; }
+
+  caixa.hidden = false;
+  papel('comp-lista').innerHTML = envios.map(envio => {
+    const tom = /VALIDAD/.test(envio.situacao) ? 'ok'
+              : /RECUS/.test(envio.situacao) ? 'erro' : 'espera';
+    return `<li data-tom="${tom}">
+      <strong>${escapar(envio.tipo_texto || 'Comprovante')}</strong>
+      <span class="miudo">enviado em ${escapar(envio.enviado_em)} ·
+        processo ${escapar(envio.processo || '—')}</span>
+      <span class="situacao-envio">${escapar(envio.situacao || '')}</span>
+      ${envio.motivo ? `<span class="miudo">${escapar(envio.motivo)}</span>` : ''}
+    </li>`;
+  }).join('');
 }
 
 // ---------------------------------------------------------------------------
