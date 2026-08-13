@@ -15,7 +15,7 @@
  *  comentário. Foi removida. Ver a nota no fim do arquivo.)
  * ------------------------------------------------------------------------
  */
-window.CONFIG_PORTAL = {'https://script.google.com/macros/s/AKfycbwDJwNk53JlcZ9PwYMlr6fRNF-RMXQPKFEjjHdMsAjnZpnJjarrBOV-y4fMtHyNhiETdg/exec'
+window.CONFIG_PORTAL = {
 
   /* URL /exec da implantação do portal_api.gs.
    *
@@ -52,7 +52,7 @@ window.CONFIG_PORTAL = {'https://script.google.com/macros/s/AKfycbwDJwNk53JlcZ9P
    *   sem esse custo. */
   admin: {
     usuario: 'BOLSAS',
-    senha: 'BOLSAS@RH',
+    senha: '',
     lembrar_no_aparelho: true,
 
     /* SHA-256 de `sal + '|' + senha` — exatamente o mesmo cálculo do _hash()

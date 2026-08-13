@@ -30,13 +30,13 @@
  * Enquanto não publicar, o código NOVO funciona online e o ANTIGO funciona
  * offline — e é por isso que o app tenta a planilha primeiro.
  *
- * Gerado em 12/08/2026, 04:52:32 · 474 servidor(es).
+ * Gerado em 12/08/2026, 04:52:32 · 464 servidor(es).
  */
 window.ACESSOS_LOCAIS = {
   versao: 1,
   gerado_em: "2026-08-12T07:52:32.746Z",
   iteracoes: 150000,
-  total: 474,
+  total: 464,
   entradas: {
   "11940": {
     "n": "ANA LUCIA AZOUBEL HELAL",

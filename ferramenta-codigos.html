@@ -319,6 +319,7 @@ document.getElementById('processar').addEventListener('click', async () => {
     }
   }
   preenche.style.width = '100%';
+  const totalEntradas = Object.keys(entradas).length;
 
   // ---- CSV de distribuição (fica com a Coordenadoria, não vai para o Git) --
   const csv = '\uFEFF' + ['MATRICULA;NOME;CODIGO;EMAIL;WHATSAPP']
@@ -360,13 +361,13 @@ document.getElementById('processar').addEventListener('click', async () => {
  * Enquanto não publicar, o código NOVO funciona online e o ANTIGO funciona
  * offline — e é por isso que o app tenta a planilha primeiro.
  *
- * Gerado em ${new Date().toLocaleString('pt-BR')} · ${validos.length} servidor(es).
+ * Gerado em ${new Date().toLocaleString('pt-BR')} · ${totalEntradas} servidor(es).
  */
 window.ACESSOS_LOCAIS = {
   versao: 1,
   gerado_em: ${JSON.stringify(new Date().toISOString())},
   iteracoes: ${ITERACOES},
-  total: ${validos.length},
+  total: ${totalEntradas},
   entradas: ${JSON.stringify(entradas, null, 2)}
 };
 `;
@@ -380,7 +381,7 @@ window.ACESSOS_LOCAIS = {
       <h2>2 · O que saiu</h2>
       <div class="numeros">
         <div><span>${registros.length}</span><small>registros lidos</small></div>
-        <div><span style="color:var(--oliva)">${validos.length}</span><small>vão para o fallback</small></div>
+        <div><span style="color:var(--oliva)">${totalEntradas}</span><small>vão para o fallback</small></div>
         <div><span style="color:var(--terracota)">${erros.length}</span><small>com erro</small></div>
         <div><span style="color:var(--laranja)">${alertas.length}</span><small>a conferir</small></div>
         <div><span>${descartadas.length}</span><small>linhas ignoradas</small></div>
