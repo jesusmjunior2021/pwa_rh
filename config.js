@@ -15,7 +15,7 @@
  *  comentário. Foi removida. Ver a nota no fim do arquivo.)
  * ------------------------------------------------------------------------
  */
-window.CONFIG_PORTAL = {
+window.CONFIG_PORTAL = {'https://script.google.com/macros/s/AKfycbwDJwNk53JlcZ9PwYMlr6fRNF-RMXQPKFEjjHdMsAjnZpnJjarrBOV-y4fMtHyNhiETdg/exec'
 
   /* URL /exec da implantação do portal_api.gs.
    *
