@@ -30,7 +30,7 @@
  */
 'use strict';
 
-const VERSAO = 'v1.3.0'; // MAT-PWA-COMPROVA-001: envio de comprovante por foto/PDF
+const VERSAO = 'v1.3.1'; // Atualiza a lista local de acessos publicada.
 const CACHE_CASCA = 'bolsa-casca-' + VERSAO;
 const CACHE_DADOS = 'bolsa-dados-' + VERSAO;
 
